@@ -1,52 +1,37 @@
 package com.algotrace.engine;
 
-import com.algotrace.engine.compiler.CompilationResult;
-import com.algotrace.engine.compiler.JavaSourceCompiler;
-import com.algotrace.engine.executor.ExecutionResult;
-import com.algotrace.engine.executor.JavaExecutor;
+import com.algotrace.engine.model.EventType;
+import com.algotrace.engine.model.ExecutionEvent;
+import com.algotrace.engine.model.ExecutionTrace;
 
 public class Main {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
 
-        String source = """
-                public class Test {
+        ExecutionTrace trace =
+                new ExecutionTrace();
 
-                    public static void main(String[] args) {
+        trace.addEvent(
 
-                        for(int i = 0; i < 5; i++){
-                            System.out.println(i);
-                        }
+                ExecutionEvent.builder()
 
-                    }
+                        .eventId(1)
 
-                }
-                """;
+                        .timestamp(System.currentTimeMillis())
 
-        JavaSourceCompiler compiler =
-                new JavaSourceCompiler();
+                        .eventType(EventType.METHOD_ENTER)
 
-        CompilationResult compilationResult =
-                compiler.compile(
-                        "Test",
-                        source
-                );
+                        .methodName("main")
 
-        System.out.println(compilationResult);
+                        .lineNumber(8)
 
-        if (!compilationResult.isSuccess()) {
+                        .threadId(1)
 
-            return;
+                        .build()
 
-        }
+        );
 
-        JavaExecutor executor =
-                new JavaExecutor();
-
-        ExecutionResult executionResult =
-                executor.execute("Test");
-
-        System.out.println(executionResult);
+        System.out.println(trace.getEvents());
 
     }
 
