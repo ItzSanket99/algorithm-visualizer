@@ -14,6 +14,8 @@ public class CompilationResult {
 
     private final boolean success;
 
+    private final String className;
+
     private final Path sourceFile;
 
     private final Path classOutputDirectory;

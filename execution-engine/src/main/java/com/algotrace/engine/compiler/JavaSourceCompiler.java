@@ -1,5 +1,6 @@
 package com.algotrace.engine.compiler;
 
+import com.algotrace.engine.parser.ClassNameExtractor;
 import com.algotrace.engine.util.WorkspaceManager;
 
 import javax.tools.*;
@@ -18,21 +19,20 @@ public class JavaSourceCompiler {
         compiler = ToolProvider.getSystemJavaCompiler();
 
         if (compiler == null) {
-
             throw new IllegalStateException(
-                    "Java Compiler not found. Make sure you are using a JDK."
+                    "Java Compiler not found. Run using JDK."
             );
-
         }
 
     }
 
-    public CompilationResult compile(
-            String className,
-            String sourceCode
-    ) throws IOException {
+    public CompilationResult compile(String sourceCode)
+            throws IOException {
 
         WorkspaceManager.initialize();
+
+        String className =
+                ClassNameExtractor.extract(sourceCode);
 
         Path sourceFile =
                 WorkspaceManager.getSourceFile(className);
@@ -50,7 +50,9 @@ public class JavaSourceCompiler {
                 );
 
         Iterable<? extends JavaFileObject> compilationUnits =
-                fileManager.getJavaFileObjects(sourceFile.toFile());
+                fileManager.getJavaFileObjects(
+                        sourceFile.toFile()
+                );
 
         List<String> options = List.of(
                 "-d",
@@ -73,20 +75,15 @@ public class JavaSourceCompiler {
 
         List<String> messages = new ArrayList<>();
 
-        for (Diagnostic<?> diagnostic : diagnostics.getDiagnostics()) {
+        for (Diagnostic<?> diagnostic :
+                diagnostics.getDiagnostics()) {
 
             messages.add(
-
                     String.format(
-
                             "Line %d : %s",
-
                             diagnostic.getLineNumber(),
-
                             diagnostic.getMessage(null)
-
                     )
-
             );
 
         }
@@ -94,6 +91,8 @@ public class JavaSourceCompiler {
         return new CompilationResult(
 
                 success,
+
+                className,
 
                 sourceFile,
 

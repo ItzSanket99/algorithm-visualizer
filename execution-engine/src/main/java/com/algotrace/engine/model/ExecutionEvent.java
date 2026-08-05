@@ -4,39 +4,66 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 
+import java.util.Map;
+
 @Getter
 @Builder
 @ToString
 public class ExecutionEvent {
 
-    /**
+    /*
      * Unique event id.
      */
     private final long eventId;
 
-    /**
-     * Time when event occurred.
+    /*
+     * Time of event.
      */
     private final long timestamp;
 
-    /**
+    /*
      * Event category.
      */
     private final EventType eventType;
 
-    /**
-     * Current executing method.
+    /*
+     * Function name.
      */
     private final String methodName;
 
-    /**
-     * Source code line number.
+    /*
+     * Source line.
      */
     private final int lineNumber;
 
-    /**
-     * Thread id.
+    /*
+     * JVM Thread.
      */
     private final long threadId;
+
+    /*
+     * Unique invocation id.
+     */
+    private final long callId;
+
+    /*
+     * Parent invocation.
+     */
+    private final Long parentCallId;
+
+    /*
+     * Current recursion depth.
+     */
+    private final int callDepth;
+
+    /*
+     * Variables.
+     */
+    private final Map<String, String> variables;
+
+    /*
+     * Returned value.
+     */
+    private final String returnValue;
 
 }

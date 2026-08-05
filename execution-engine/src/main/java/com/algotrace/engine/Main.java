@@ -1,37 +1,61 @@
 package com.algotrace.engine;
 
-import com.algotrace.engine.model.EventType;
-import com.algotrace.engine.model.ExecutionEvent;
-import com.algotrace.engine.model.ExecutionTrace;
+import com.algotrace.engine.compiler.CompilationResult;
+import com.algotrace.engine.compiler.JavaSourceCompiler;
+import com.algotrace.engine.debug.DebugLauncher;
+import com.algotrace.engine.debug.DebugSession;
+import com.algotrace.engine.debug.MethodEventCollector;
 
 public class Main {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
-        ExecutionTrace trace =
-                new ExecutionTrace();
+        String source = """
+            public class Test {
+            
+                public static void main(String[] args) {
+            
+                    factorial(3);
+            
+                }
+            
+                static int factorial(int n){
+            
+                    if(n==0)
+                        return 1;
+            
+                    return n*factorial(n-1);
+            
+                }
+            
+            }
+            """;
 
-        trace.addEvent(
+        JavaSourceCompiler compiler =
+                new JavaSourceCompiler();
 
-                ExecutionEvent.builder()
+        CompilationResult result =
+                compiler.compile(source);
 
-                        .eventId(1)
+        if (!result.isSuccess()) {
 
-                        .timestamp(System.currentTimeMillis())
+            System.out.println(result);
 
-                        .eventType(EventType.METHOD_ENTER)
+            return;
 
-                        .methodName("main")
+        }
 
-                        .lineNumber(8)
+        DebugLauncher launcher = new DebugLauncher();
 
-                        .threadId(1)
+        try (DebugSession session =
+                     launcher.launch(result.getClassName())) {
 
-                        .build()
+            MethodEventCollector collector =
+                    new MethodEventCollector(session);
 
-        );
+            collector.start();
 
-        System.out.println(trace.getEvents());
+        }
 
     }
 
