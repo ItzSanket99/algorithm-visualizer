@@ -2,6 +2,7 @@ package com.algotrace.engine.tracer;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class CallStackTracker {
@@ -12,13 +13,12 @@ public class CallStackTracker {
     private final Deque<CallContext> stack =
             new ArrayDeque<>();
 
-    /**
-     * Push new function invocation.
-     */
-    public CallContext enter(String methodName) {
+    public CallContext enter(
+            String methodName,
+            Map<String, String> parameters
+    ) {
 
-        CallContext parent =
-                stack.peek();
+        CallContext parent = stack.peek();
 
         CallContext context =
                 CallContext.builder()
@@ -33,9 +33,17 @@ public class CallStackTracker {
                                         : parent.getCallId()
                         )
 
-                        .methodName(methodName)
+                        .methodName(
+                                methodName
+                        )
 
-                        .depth(stack.size())
+                        .depth(
+                                stack.size()
+                        )
+
+                        .parameters(
+                                parameters
+                        )
 
                         .build();
 
@@ -45,9 +53,6 @@ public class CallStackTracker {
 
     }
 
-    /**
-     * Exit current invocation.
-     */
     public CallContext exit() {
 
         return stack.pop();

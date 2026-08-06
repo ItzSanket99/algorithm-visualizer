@@ -1,5 +1,6 @@
 package com.algotrace.engine.debug;
 
+import com.algotrace.engine.model.ExecutionTrace;
 import com.algotrace.engine.tracer.ExecutionTraceBuilder;
 import com.sun.jdi.Method;
 import com.sun.jdi.event.*;
@@ -11,6 +12,9 @@ import com.sun.jdi.request.MethodExitRequest;
 public class MethodEventCollector {
 
     private final DebugSession session;
+
+    private final ExecutionTraceBuilder traceBuilder =
+            new ExecutionTraceBuilder();
 
     public MethodEventCollector(DebugSession session) {
         this.session = session;
@@ -43,14 +47,13 @@ public class MethodEventCollector {
 
                 else if (event instanceof MethodEntryEvent entryEvent) {
 
-                    builder.onMethodEnter(entryEvent);
+                    traceBuilder.onMethodEnter(entryEvent);
 
                 }
 
                 else if (event instanceof MethodExitEvent exitEvent) {
 
-                    builder.onMethodExit(exitEvent);;
-
+                    traceBuilder.onMethodExit(exitEvent);
                 }
 
                 else if (event instanceof VMDeathEvent) {
@@ -75,10 +78,6 @@ public class MethodEventCollector {
             eventSet.resume();
 
         }
-
-        builder.getTrace()
-                .getEvents()
-                .forEach(System.out::println);
 
     }
 
@@ -118,8 +117,11 @@ public class MethodEventCollector {
 
     }
 
-    ExecutionTraceBuilder builder =
-            new ExecutionTraceBuilder();
+    public ExecutionTrace getExecutionTrace() {
+
+        return traceBuilder.getTrace();
+
+    }
 
     private void printMethodExit(MethodExitEvent event) {
 

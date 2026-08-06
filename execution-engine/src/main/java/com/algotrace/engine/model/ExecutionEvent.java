@@ -17,17 +17,17 @@ public class ExecutionEvent {
     private final long eventId;
 
     /*
-     * Time of event.
+     * Event timestamp.
      */
     private final long timestamp;
 
     /*
-     * Event category.
+     * Event type.
      */
     private final EventType eventType;
 
     /*
-     * Function name.
+     * Method name.
      */
     private final String methodName;
 
@@ -37,7 +37,7 @@ public class ExecutionEvent {
     private final int lineNumber;
 
     /*
-     * JVM Thread.
+     * Thread id.
      */
     private final long threadId;
 
@@ -52,17 +52,22 @@ public class ExecutionEvent {
     private final Long parentCallId;
 
     /*
-     * Current recursion depth.
+     * Recursion depth.
      */
     private final int callDepth;
 
     /*
-     * Variables.
+     * Method parameters.
+     */
+    private final Map<String, String> parameters;
+
+    /*
+     * Local variables.
      */
     private final Map<String, String> variables;
 
     /*
-     * Returned value.
+     * Return value.
      */
     private final String returnValue;
 

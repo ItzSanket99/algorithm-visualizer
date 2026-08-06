@@ -1,6 +1,6 @@
 public class Test {
 
-    public static void main(String[] args) {
+    public static void main(String[] args){
 
         factorial(3);
 
@@ -11,7 +11,9 @@ public class Test {
         if(n==0)
             return 1;
 
-        return n*factorial(n-1);
+        int result = n * factorial(n-1);
+
+        return result;
 
     }
 

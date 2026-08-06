@@ -55,6 +55,8 @@ public class JavaSourceCompiler {
                 );
 
         List<String> options = List.of(
+                "-g",
+                "-parameters",
                 "-d",
                 WorkspaceManager.getClassDirectory().toString()
         );

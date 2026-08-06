@@ -3,30 +3,35 @@ package com.algotrace.engine.tracer;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.util.Map;
+
 @Getter
 @Builder
 public class CallContext {
 
     /**
-     * Unique function invocation id.
+     * Unique invocation id.
      */
     private final long callId;
 
     /**
      * Parent invocation.
-     *
-     * null for root.
      */
     private final Long parentCallId;
 
     /**
-     * Current method.
+     * Method name.
      */
     private final String methodName;
 
     /**
-     * Current recursion depth.
+     * Recursion depth.
      */
     private final int depth;
+
+    /**
+     * Method parameters.
+     */
+    private final Map<String, String> parameters;
 
 }

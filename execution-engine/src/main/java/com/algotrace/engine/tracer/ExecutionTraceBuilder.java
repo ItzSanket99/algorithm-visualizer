@@ -1,5 +1,6 @@
 package com.algotrace.engine.tracer;
 
+import com.algotrace.engine.debug.MethodParameterExtractor;
 import com.algotrace.engine.model.EventType;
 import com.algotrace.engine.model.ExecutionEvent;
 import com.algotrace.engine.model.ExecutionTrace;
@@ -8,6 +9,7 @@ import com.sun.jdi.event.MethodEntryEvent;
 import com.sun.jdi.event.MethodExitEvent;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ExecutionTraceBuilder {
@@ -21,14 +23,20 @@ public class ExecutionTraceBuilder {
     private final ExecutionTrace trace =
             new ExecutionTrace();
 
+    private final MethodParameterExtractor parameterExtractor =
+            new MethodParameterExtractor();
+
     public void onMethodEnter(MethodEntryEvent event) {
 
-        Method method =
-                event.method();
+        Method method = event.method();
+
+        Map<String, String> parameters =
+                parameterExtractor.extract(event);
 
         CallContext context =
                 stackTracker.enter(
-                        method.name()
+                        method.name(),
+                        parameters
                 );
 
         ExecutionEvent executionEvent =
@@ -70,6 +78,10 @@ public class ExecutionTraceBuilder {
                                 context.getDepth()
                         )
 
+                        .parameters(
+                                context.getParameters()
+                        )
+
                         .variables(
                                 Collections.emptyMap()
                         )
@@ -86,8 +98,7 @@ public class ExecutionTraceBuilder {
 
     public void onMethodExit(MethodExitEvent event) {
 
-        Method method =
-                event.method();
+        Method method = event.method();
 
         CallContext context =
                 stackTracker.exit();
@@ -129,6 +140,10 @@ public class ExecutionTraceBuilder {
 
                         .callDepth(
                                 context.getDepth()
+                        )
+
+                        .parameters(
+                                context.getParameters()
                         )
 
                         .variables(
