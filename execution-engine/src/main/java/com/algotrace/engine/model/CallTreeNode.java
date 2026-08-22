@@ -20,10 +20,10 @@ public class CallTreeNode {
 
     private final Map<String, String> parameters;
 
-    private String returnValue;
-
     private final List<CallTreeNode> children =
             new ArrayList<>();
+
+    private String returnValue;
 
     public CallTreeNode(
             long callId,
@@ -34,24 +34,39 @@ public class CallTreeNode {
     ) {
 
         this.callId = callId;
-        this.parentCallId = parentCallId;
-        this.methodName = methodName;
-        this.depth = depth;
-        this.parameters = parameters;
+
+        this.parentCallId =
+                parentCallId;
+
+        this.methodName =
+                methodName;
+
+        this.depth =
+                depth;
+
+        this.parameters =
+                parameters;
     }
 
-    public void addChild(CallTreeNode child) {
+    public void addChild(
+            CallTreeNode child
+    ) {
 
         children.add(child);
     }
 
-    public void setReturnValue(String returnValue) {
+    public void setReturnValue(
+            String returnValue
+    ) {
 
-        this.returnValue = returnValue;
+        this.returnValue =
+                returnValue;
     }
 
     public List<CallTreeNode> getChildren() {
 
-        return Collections.unmodifiableList(children);
+        return Collections.unmodifiableList(
+                children
+        );
     }
 }

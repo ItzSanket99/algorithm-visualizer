@@ -13,31 +13,26 @@ public class CallTreeBuilder {
 
     public CallTree build(ExecutionTrace trace) {
 
-        CallTree tree =
-                new CallTree();
+        CallTree tree = new CallTree();
 
         Map<Long, CallTreeNode> nodeMap =
                 new HashMap<>();
 
-        for (ExecutionEvent event :
-                trace.getEvents()) {
+        for (ExecutionEvent event : trace.getEvents()) {
 
-            if (event.getEventType()
-                    == EventType.METHOD_ENTER) {
+            /*
+             * Create a node when a method starts.
+             */
+            if (event.getEventType() ==
+                    EventType.METHOD_ENTER) {
 
                 CallTreeNode node =
                         new CallTreeNode(
-
                                 event.getCallId(),
-
                                 event.getParentCallId(),
-
                                 event.getMethodName(),
-
                                 event.getCallDepth(),
-
                                 event.getParameters()
-
                         );
 
                 nodeMap.put(
@@ -45,6 +40,9 @@ public class CallTreeBuilder {
                         node
                 );
 
+                /*
+                 * Root method.
+                 */
                 if (node.getParentCallId() == null) {
 
                     tree.setRoot(node);
@@ -62,11 +60,13 @@ public class CallTreeBuilder {
 
                     }
                 }
-
             }
 
-            else if (event.getEventType()
-                    == EventType.METHOD_EXIT) {
+            /*
+             * Attach return value when method exits.
+             */
+            else if (event.getEventType() ==
+                    EventType.METHOD_EXIT) {
 
                 CallTreeNode node =
                         nodeMap.get(

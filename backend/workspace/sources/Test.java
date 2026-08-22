@@ -3,7 +3,7 @@ public class Test {
     public static void main(String[] args) {
 
         System.out.println(
-            fib(4)
+            fib(5)
         );
     }
 
@@ -13,6 +13,6 @@ public class Test {
             return n;
         }
 
-        return fib(n-1) + fib(n-2);
+        return fib(n - 1) + fib(n - 2);
     }
 }

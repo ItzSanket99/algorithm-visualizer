@@ -1,70 +1,147 @@
-import React from "react";
+function NodeCard({ node, onSelect }) {
 
-function CallTreeNode({ node, isLast = true }) {
     if (!node) {
         return null;
     }
 
-    const parameters = node.parameters || {};
-    const children = node.children || [];
+    const parameters =
+        node.parameters || {};
 
     const parameterText =
         Object.entries(parameters)
-            .map(([key, value]) => `${key}=${value}`)
+            .map(
+                ([key, value]) =>
+                    `${key}=${value}`
+            )
             .join(", ");
 
-    const methodText =
-        `${node.methodName}(${parameterText})`;
+    return (
+        <button
+            className="recursion-node"
+            onClick={() => onSelect(node)}
+        >
 
-    const hasReturnValue =
-        node.returnValue !== null &&
-        node.returnValue !== undefined;
+            <div className="node-method">
+                {node.methodName}
+            </div>
+
+            <div className="node-parameters">
+                {parameterText}
+            </div>
+
+            <div className="node-return">
+                → {node.returnValue ?? "—"}
+            </div>
+
+        </button>
+    );
+}
+
+
+function RecursionTree({
+    node,
+    onSelect
+}) {
+
+    if (!node) {
+        return null;
+    }
+
+    const children =
+        node.children || [];
+
+    /*
+     * The first child represents
+     * the left recursive call.
+     *
+     * The second child represents
+     * the right recursive call.
+     *
+     * This matches expressions such as:
+     *
+     * fib(n - 1) + fib(n - 2)
+     */
+    const leftChild =
+        children[0] || null;
+
+    const rightChild =
+        children[1] || null;
 
     return (
-        <div className="call-tree-node">
+        <div className="recursion-subtree">
 
-            <div className="call-tree-row">
+            <div className="recursion-node-wrapper">
 
-                <span className="tree-branch">
-                    {isLast ? "└── " : "├── "}
-                </span>
-
-                <span className="tree-method">
-                    {methodText}
-                </span>
-
-                {hasReturnValue && (
-                    <span className="tree-return">
-                        → {node.returnValue}
-                    </span>
-                )}
+                <NodeCard
+                    node={node}
+                    onSelect={onSelect}
+                />
 
             </div>
 
-            {children.length > 0 && (
-                <div className="call-tree-children">
+            {(leftChild || rightChild) && (
 
-                    {children.map((child, index) => (
+                <>
 
-                        <CallTreeNode
-                            key={child.callId}
-                            node={child}
-                            isLast={
-                                index ===
-                                children.length - 1
-                            }
-                        />
+                    <div className="tree-connector">
 
-                    ))}
+                        <div className="vertical-line" />
 
-                </div>
+                        <div className="horizontal-line" />
+
+                    </div>
+
+                    <div className="recursion-children">
+
+                        <div className="recursion-child left-child">
+
+                            {leftChild ? (
+
+                                <RecursionTree
+                                    node={leftChild}
+                                    onSelect={onSelect}
+                                />
+
+                            ) : (
+
+                                <div className="empty-child" />
+
+                            )}
+
+                        </div>
+
+                        <div className="recursion-child right-child">
+
+                            {rightChild ? (
+
+                                <RecursionTree
+                                    node={rightChild}
+                                    onSelect={onSelect}
+                                />
+
+                            ) : (
+
+                                <div className="empty-child" />
+
+                            )}
+
+                        </div>
+
+                    </div>
+
+                </>
+
             )}
 
         </div>
     );
 }
 
-export default function CallTree({ root }) {
+
+export default function CallTree({
+    root,
+    onSelect
+}) {
 
     if (!root) {
 
@@ -75,12 +152,46 @@ export default function CallTree({ root }) {
         );
     }
 
-    return (
-        <div className="call-tree">
+    /*
+     * Currently the API root is main().
+     *
+     * main() normally has one child:
+     * the first algorithm method.
+     *
+     * We display main separately and
+     * render the algorithm tree underneath.
+     */
 
-            <CallTreeNode
-                node={root}
-                isLast={true}
+    const children =
+        root.children || [];
+
+    const algorithmRoot =
+        children.length === 1
+            ? children[0]
+            : root;
+
+    return (
+        <div className="recursion-tree">
+
+            {root.methodName === "main" &&
+                children.length === 1 && (
+
+                    <div className="main-call">
+
+                        <NodeCard
+                            node={root}
+                            onSelect={onSelect}
+                        />
+
+                        <div className="main-connector" />
+
+                    </div>
+
+                )}
+
+            <RecursionTree
+                node={algorithmRoot}
+                onSelect={onSelect}
             />
 
         </div>

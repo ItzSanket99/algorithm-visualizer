@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { executeCode } from "./services/executionApi";
 import CallTree from "./components/CallTree";
+import ExecutionState from "./components/ExecutionState";
+
+function findFirstEventForCall(events, callId) {
+    return events.find(
+        (event) =>
+            event.callId === callId &&
+            event.eventType === "LINE_EXECUTED"
+    );
+}
 
 function App() {
 
@@ -10,22 +19,25 @@ function App() {
     public static void main(String[] args) {
 
         System.out.println(
-            factorial(3)
+            fib(4)
         );
     }
 
-    static int factorial(int n) {
+    static int fib(int n) {
 
-        if (n == 0) {
-            return 1;
+        if (n <= 1) {
+            return n;
         }
 
-        return n * factorial(n - 1);
+        return fib(n - 1) + fib(n - 2);
     }
 }`
     );
 
     const [execution, setExecution] =
+        useState(null);
+
+    const [selectedEvent, setSelectedEvent] =
         useState(null);
 
     const [loading, setLoading] =
@@ -38,13 +50,13 @@ function App() {
 
         setLoading(true);
         setError(null);
+        setExecution(null);
+        setSelectedEvent(null);
 
         try {
 
             const result =
-                await executeCode(
-                    sourceCode
-                );
+                await executeCode(sourceCode);
 
             if (!result.success) {
 
@@ -52,8 +64,6 @@ function App() {
                     result.error ||
                     "Execution failed."
                 );
-
-                setExecution(null);
 
                 return;
             }
@@ -63,8 +73,6 @@ function App() {
             );
 
         } catch (error) {
-
-            setExecution(null);
 
             setError(
                 error.response?.data?.error ||
@@ -78,36 +86,65 @@ function App() {
         }
     }
 
+    function handleCallSelect(node) {
+
+        if (!execution) {
+            return;
+        }
+
+        const event =
+            findFirstEventForCall(
+                execution.events,
+                node.callId
+            );
+
+        setSelectedEvent(event || null);
+    }
+
     return (
         <div className="app">
 
+            {/* =========================
+                HEADER
+               ========================= */}
+
             <header className="app-header">
 
-                <div>
+    <div className="app-brand">
 
-                    <h1>
-                        AlgoTrace
-                    </h1>
+        <h1>
+            AlgoTrace
+        </h1>
 
-                    <p>
-                        Visualize your code execution
-                    </p>
+        <p>
+            Visualize your code execution
+        </p>
 
-                </div>
+    </div>
 
-                <button
-                    className="run-button"
-                    onClick={handleRun}
-                    disabled={loading}
-                >
-                    {loading
-                        ? "Running..."
-                        : "Run Code"}
-                </button>
+    <button
+        className="run-button"
+        onClick={handleRun}
+        disabled={loading}
+    >
+        {loading
+            ? "Running..."
+            : "Run Code"}
+    </button>
 
-            </header>
+</header>
+
+
+
+            {/* =========================
+                MAIN WORKSPACE
+               ========================= */}
 
             <main className="workspace">
+
+                {/* =========================
+                    SOURCE CODE
+                   ========================= */}
 
                 <section className="panel code-panel">
 
@@ -132,6 +169,11 @@ function App() {
 
                 </section>
 
+
+                {/* =========================
+                    CALL TREE
+                   ========================= */}
+
                 <section className="panel tree-panel">
 
                     <div className="panel-header">
@@ -149,6 +191,9 @@ function App() {
                             <CallTree
                                 root={
                                     execution.callTree
+                                }
+                                onSelect={
+                                    handleCallSelect
                                 }
                             />
 
@@ -171,6 +216,11 @@ function App() {
 
             </main>
 
+
+            {/* =========================
+                ERROR
+               ========================= */}
+
             {error && (
 
                 <div className="error-message">
@@ -178,6 +228,31 @@ function App() {
                     {error}
 
                 </div>
+
+            )}
+
+
+            {/* =========================
+                EXECUTION STATE
+               ========================= */}
+
+            {execution && (
+
+                <section className="panel state-panel">
+
+                    <div className="panel-header">
+
+                        <h2>
+                            Execution State
+                        </h2>
+
+                    </div>
+
+                    <ExecutionState
+                        event={selectedEvent}
+                    />
+
+                </section>
 
             )}
 
