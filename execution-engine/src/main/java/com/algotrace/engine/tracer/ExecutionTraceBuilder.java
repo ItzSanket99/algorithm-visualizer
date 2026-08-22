@@ -5,6 +5,7 @@ import com.algotrace.engine.model.EventType;
 import com.algotrace.engine.model.ExecutionEvent;
 import com.algotrace.engine.model.ExecutionTrace;
 import com.sun.jdi.Method;
+import com.sun.jdi.Value;
 import com.sun.jdi.event.MethodEntryEvent;
 import com.sun.jdi.event.MethodExitEvent;
 
@@ -93,7 +94,6 @@ public class ExecutionTraceBuilder {
                         .build();
 
         trace.addEvent(executionEvent);
-
     }
 
     public void onMethodExit(MethodExitEvent event) {
@@ -102,6 +102,11 @@ public class ExecutionTraceBuilder {
 
         CallContext context =
                 stackTracker.exit();
+
+        String returnValue =
+                formatReturnValue(
+                        event.returnValue()
+                );
 
         ExecutionEvent executionEvent =
                 ExecutionEvent.builder()
@@ -151,19 +156,25 @@ public class ExecutionTraceBuilder {
                         )
 
                         .returnValue(
-                                null
+                                returnValue
                         )
 
                         .build();
 
         trace.addEvent(executionEvent);
+    }
 
+    private String formatReturnValue(Value value) {
+
+        if (value == null) {
+            return "void";
+        }
+
+        return value.toString();
     }
 
     public ExecutionTrace getTrace() {
 
         return trace;
-
     }
-
 }

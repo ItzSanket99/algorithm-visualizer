@@ -10,7 +10,6 @@ public class TreePrinter {
     public static void print(CallTreeNode root) {
 
         print(root, "", true, true);
-
     }
 
     private static void print(
@@ -28,16 +27,23 @@ public class TreePrinter {
 
         if (!root) {
 
-            System.out.print(last ? "└── " : "├── ");
-
+            System.out.print(
+                    last
+                            ? "└── "
+                            : "├── "
+            );
         }
 
-        System.out.print(node.getMethodName());
+        System.out.print(
+                node.getMethodName()
+        );
 
         System.out.print("(");
 
         Iterator<Map.Entry<String, String>> iterator =
-                node.getParameters().entrySet().iterator();
+                node.getParameters()
+                        .entrySet()
+                        .iterator();
 
         while (iterator.hasNext()) {
 
@@ -45,20 +51,28 @@ public class TreePrinter {
                     iterator.next();
 
             System.out.print(
-                    entry.getKey() +
-                            "=" +
-                            entry.getValue()
+                    entry.getKey()
+                            + "="
+                            + entry.getValue()
             );
 
             if (iterator.hasNext()) {
 
                 System.out.print(", ");
-
             }
-
         }
 
-        System.out.println(")");
+        System.out.print(")");
+
+        if (node.getReturnValue() != null) {
+
+            System.out.print(
+                    " → "
+                            + node.getReturnValue()
+            );
+        }
+
+        System.out.println();
 
         String childPrefix;
 
@@ -70,11 +84,15 @@ public class TreePrinter {
 
             childPrefix =
                     prefix +
-                            (last ? "    " : "│   ");
-
+                            (
+                                    last
+                                            ? "    "
+                                            : "│   "
+                            );
         }
 
-        int size = node.getChildren().size();
+        int size =
+                node.getChildren().size();
 
         for (int i = 0; i < size; i++) {
 
@@ -87,11 +105,7 @@ public class TreePrinter {
                     i == size - 1,
 
                     false
-
             );
-
         }
-
     }
-
 }

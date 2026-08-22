@@ -13,55 +13,75 @@ public class CallTreeBuilder {
 
     public CallTree build(ExecutionTrace trace) {
 
-        CallTree tree = new CallTree();
+        CallTree tree =
+                new CallTree();
 
         Map<Long, CallTreeNode> nodeMap =
                 new HashMap<>();
 
-        for (ExecutionEvent event : trace.getEvents()) {
+        for (ExecutionEvent event :
+                trace.getEvents()) {
 
-            if (event.getEventType() != EventType.METHOD_ENTER) {
-                continue;
-            }
+            if (event.getEventType()
+                    == EventType.METHOD_ENTER) {
 
-            CallTreeNode node =
-                    new CallTreeNode(
+                CallTreeNode node =
+                        new CallTreeNode(
 
-                            event.getCallId(),
+                                event.getCallId(),
 
-                            event.getParentCallId(),
+                                event.getParentCallId(),
 
-                            event.getMethodName(),
+                                event.getMethodName(),
 
-                            event.getCallDepth(),
+                                event.getCallDepth(),
 
-                            event.getParameters()
+                                event.getParameters()
 
-                    );
+                        );
 
-            nodeMap.put(node.getCallId(), node);
+                nodeMap.put(
+                        node.getCallId(),
+                        node
+                );
 
-            if (node.getParentCallId() == null) {
+                if (node.getParentCallId() == null) {
 
-                tree.setRoot(node);
+                    tree.setRoot(node);
 
-            } else {
+                } else {
 
-                CallTreeNode parent =
-                        nodeMap.get(node.getParentCallId());
+                    CallTreeNode parent =
+                            nodeMap.get(
+                                    node.getParentCallId()
+                            );
 
-                if (parent != null) {
+                    if (parent != null) {
 
-                    parent.addChild(node);
+                        parent.addChild(node);
 
+                    }
                 }
 
             }
 
+            else if (event.getEventType()
+                    == EventType.METHOD_EXIT) {
+
+                CallTreeNode node =
+                        nodeMap.get(
+                                event.getCallId()
+                        );
+
+                if (node != null) {
+
+                    node.setReturnValue(
+                            event.getReturnValue()
+                    );
+                }
+            }
         }
 
         return tree;
-
     }
-
 }
