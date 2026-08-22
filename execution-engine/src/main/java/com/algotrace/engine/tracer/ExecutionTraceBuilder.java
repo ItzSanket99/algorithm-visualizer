@@ -1,13 +1,16 @@
 package com.algotrace.engine.tracer;
 
 import com.algotrace.engine.debug.MethodParameterExtractor;
+import com.algotrace.engine.debug.VariableStateExtractor;
 import com.algotrace.engine.model.EventType;
 import com.algotrace.engine.model.ExecutionEvent;
 import com.algotrace.engine.model.ExecutionTrace;
 import com.sun.jdi.Method;
+import com.sun.jdi.StackFrame;
 import com.sun.jdi.Value;
 import com.sun.jdi.event.MethodEntryEvent;
 import com.sun.jdi.event.MethodExitEvent;
+import com.sun.jdi.event.StepEvent;
 
 import java.util.Collections;
 import java.util.Map;
@@ -26,6 +29,9 @@ public class ExecutionTraceBuilder {
 
     private final MethodParameterExtractor parameterExtractor =
             new MethodParameterExtractor();
+
+    private final VariableStateExtractor variableStateExtractor =
+            new VariableStateExtractor();
 
     public void onMethodEnter(MethodEntryEvent event) {
 
@@ -94,6 +100,89 @@ public class ExecutionTraceBuilder {
                         .build();
 
         trace.addEvent(executionEvent);
+    }
+
+    public void onLineExecuted(StepEvent event) {
+
+        try {
+
+            StackFrame frame =
+                    event.thread().frame(0);
+
+            Method method =
+                    frame.location().method();
+
+            CallContext context =
+                    stackTracker.current();
+
+            if (context == null) {
+                return;
+            }
+
+            Map<String, String> variables =
+                    variableStateExtractor.extract(frame);
+
+            ExecutionEvent executionEvent =
+                    ExecutionEvent.builder()
+
+                            .eventId(
+                                    nextEventId.getAndIncrement()
+                            )
+
+                            .timestamp(
+                                    System.currentTimeMillis()
+                            )
+
+                            .eventType(
+                                    EventType.LINE_EXECUTED
+                            )
+
+                            .methodName(
+                                    method.name()
+                            )
+
+                            .lineNumber(
+                                    event.location().lineNumber()
+                            )
+
+                            .threadId(
+                                    event.thread().uniqueID()
+                            )
+
+                            .callId(
+                                    context.getCallId()
+                            )
+
+                            .parentCallId(
+                                    context.getParentCallId()
+                            )
+
+                            .callDepth(
+                                    context.getDepth()
+                            )
+
+                            .parameters(
+                                    context.getParameters()
+                            )
+
+                            .variables(
+                                    variables
+                            )
+
+                            .returnValue(
+                                    null
+                            )
+
+                            .build();
+
+            trace.addEvent(executionEvent);
+
+        } catch (Exception ignored) {
+            /*
+             * A frame may disappear when the method
+             * is exiting. Ignore that single step.
+             */
+        }
     }
 
     public void onMethodExit(MethodExitEvent event) {

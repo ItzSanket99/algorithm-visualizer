@@ -1,20 +1,21 @@
 public class Test {
 
-    public static void main(String[] args){
+    public static void main(String[] args) {
 
-        factorial(5);
+        int result = factorial(3);
 
+        System.out.println(result);
     }
 
-    static int factorial(int n){
+    static int factorial(int n) {
 
-        if(n==0)
+        if (n == 0) {
             return 1;
+        }
 
-        int result = n * factorial(n-1);
+        int result =
+                n * factorial(n - 1);
 
         return result;
-
     }
-
 }

@@ -18,7 +18,8 @@ public class CallStackTracker {
             Map<String, String> parameters
     ) {
 
-        CallContext parent = stack.peek();
+        CallContext parent =
+                stack.peek();
 
         CallContext context =
                 CallContext.builder()
@@ -50,25 +51,29 @@ public class CallStackTracker {
         stack.push(context);
 
         return context;
-
     }
 
     public CallContext exit() {
 
-        return stack.pop();
+        if (stack.isEmpty()) {
+            return null;
+        }
 
+        return stack.pop();
+    }
+
+    public CallContext current() {
+
+        return stack.peek();
     }
 
     public boolean isEmpty() {
 
         return stack.isEmpty();
-
     }
 
     public int currentDepth() {
 
         return stack.size();
-
     }
-
 }
