@@ -1,6 +1,5 @@
 package com.algotrace.backend.execution;
 
-import com.algotrace.engine.model.ExecutionTrace;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -10,17 +9,17 @@ public class ExecutionResponse {
 
     private final boolean success;
 
-    private final ExecutionTrace trace;
+    private final ExecutionData execution;
 
     private final String error;
 
     public static ExecutionResponse success(
-            ExecutionTrace trace
+            ExecutionData execution
     ) {
 
         return new ExecutionResponse(
                 true,
-                trace,
+                execution,
                 null
         );
     }
