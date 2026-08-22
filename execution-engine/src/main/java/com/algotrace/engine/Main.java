@@ -1,10 +1,5 @@
 package com.algotrace.engine;
 
-import com.algotrace.engine.compiler.CompilationResult;
-import com.algotrace.engine.compiler.JavaSourceCompiler;
-import com.algotrace.engine.debug.DebugLauncher;
-import com.algotrace.engine.debug.DebugSession;
-import com.algotrace.engine.debug.MethodEventCollector;
 import com.algotrace.engine.model.CallTree;
 import com.algotrace.engine.model.ExecutionTrace;
 import com.algotrace.engine.tracer.CallTreeBuilder;
@@ -16,87 +11,62 @@ public class Main {
     public static void main(String[] args) {
 
         String sourceCode = """
-        public class Test {
+                public class Test {
 
-            public static void main(String[] args) {
+                    public static void main(String[] args) {
 
-                int result = factorial(3);
+                        int result = factorial(3);
 
-                System.out.println(result);
-            }
+                        System.out.println(result);
+                    }
 
-            static int factorial(int n) {
+                    static int factorial(int n) {
 
-                if (n == 0) {
-                    return 1;
+                        if (n == 0) {
+                            return 1;
+                        }
+
+                        int result =
+                                n * factorial(n - 1);
+
+                        return result;
+                    }
                 }
-
-                int result =
-                        n * factorial(n - 1);
-
-                return result;
-            }
-        }
-        """;
+                """;
 
         try {
 
-            // ==========================================
-            // 1. COMPILE
-            // ==========================================
+            /*
+             * ==========================================
+             * EXECUTE USER CODE
+             * ==========================================
+             */
 
-            JavaSourceCompiler compiler =
-                    new JavaSourceCompiler();
-
-            CompilationResult compilationResult =
-                    compiler.compile(sourceCode);
-
-            if (!compilationResult.isSuccess()) {
-
-                System.out.println(
-                        "Compilation failed:"
-                );
-
-                compilationResult
-                        .getDiagnostics()
-                        .forEach(System.out::println);
-
-                return;
-            }
-
-            // ==========================================
-            // 2. START DEBUG SESSION
-            // ==========================================
-
-            DebugLauncher launcher =
-                    new DebugLauncher();
-
-            DebugSession session =
-                    launcher.launch(
-                            compilationResult.getClassName()
-                    );
-
-            // ==========================================
-            // 3. COLLECT EXECUTION
-            // ==========================================
-
-            MethodEventCollector collector =
-                    new MethodEventCollector(session);
-
-            collector.start();
+            ExecutionEngine engine =
+                    new ExecutionEngine();
 
             ExecutionTrace trace =
-                    collector.getExecutionTrace();
+                    engine.execute(
+                            sourceCode
+                    );
 
-            // ==========================================
-            // 4. CALL TREE
-            // ==========================================
+            /*
+             * ==========================================
+             * BUILD CALL TREE
+             * ==========================================
+             */
 
             CallTreeBuilder treeBuilder =
                     new CallTreeBuilder();
 
             CallTree tree =
                     treeBuilder.build(trace);
+
+            /*
+             * ==========================================
+             * PRINT CALL TREE
+             * ==========================================
+             */
 
             System.out.println();
             System.out.println(
@@ -108,17 +78,13 @@ public class Main {
                 TreePrinter.print(
                         tree.getRoot()
                 );
-
-            } else {
-
-                System.out.println(
-                        "No call tree generated."
-                );
             }
 
-            // ==========================================
-            // 5. EXECUTION TIMELINE
-            // ==========================================
+            /*
+             * ==========================================
+             * PRINT EXECUTION TIMELINE
+             * ==========================================
+             */
 
             ExecutionTimelinePrinter.print(
                     trace
