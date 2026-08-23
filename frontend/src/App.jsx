@@ -4,18 +4,234 @@ import { executeCode } from "./services/executionApi";
 import CallTree from "./components/CallTree";
 import ExecutionState from "./components/ExecutionState";
 
-function findFirstEventForCall(events, callId) {
-    return events.find(
-        (event) =>
-            event.callId === callId &&
-            event.eventType === "LINE_EXECUTED"
-    );
+
+/*
+ * =========================================================
+ * BUILD PLAYBACK
+ * =========================================================
+ *
+ * We intentionally create ONE playback state per call.
+ *
+ * We do NOT use every raw execution event because that
+ * produces dozens of unnecessary Previous / Next steps.
+ *
+ * Order:
+ *
+ * main
+ *   ↓
+ * fib(4)
+ *   ↓
+ * fib(3)
+ *   ↓
+ * fib(2)
+ *   ↓
+ * fib(1)
+ *   ↓
+ * fib(0)
+ *   ↓
+ * ...
+ *
+ * This is a preorder traversal of the call tree.
+ */
+
+function buildCallPlayback(root) {
+
+    if (!root) {
+        return [];
+    }
+
+    const result = [];
+
+
+    function visit(node) {
+
+        if (!node) {
+            return;
+        }
+
+        /*
+         * Add current call first.
+         */
+        result.push(node);
+
+
+        /*
+         * Then visit children from left to right.
+         *
+         * This preserves the actual recursive
+         * call structure:
+         *
+         * fib(n - 1)
+         * fib(n - 2)
+         */
+        const children =
+            node.children || [];
+
+        children.forEach(child => {
+            visit(child);
+        });
+    }
+
+
+    visit(root);
+
+    return result;
 }
+
+
+/*
+ * =========================================================
+ * FIND EVENT FOR CALL
+ * =========================================================
+ *
+ * The call tree contains the structural information.
+ * The execution events contain the detailed state.
+ *
+ * We use the callId to find the most useful event for
+ * that particular call.
+ */
+
+function findBestEventForCall(events, callId) {
+
+    if (!events || callId == null) {
+        return null;
+    }
+
+
+    /*
+     * Prefer METHOD_EXIT because it normally contains
+     * the final return value.
+     */
+    const exitEvent =
+        events.find(
+            event =>
+                event.callId === callId &&
+                event.eventType === "METHOD_EXIT"
+        );
+
+    if (exitEvent) {
+        return exitEvent;
+    }
+
+
+    /*
+     * Otherwise use METHOD_ENTER.
+     */
+    const enterEvent =
+        events.find(
+            event =>
+                event.callId === callId &&
+                event.eventType === "METHOD_ENTER"
+        );
+
+    if (enterEvent) {
+        return enterEvent;
+    }
+
+
+    /*
+     * Finally use any event belonging to the call.
+     */
+    return events.find(
+        event =>
+            event.callId === callId
+    ) || null;
+}
+
+
+/*
+ * =========================================================
+ * MERGE CALL NODE + EVENT
+ * =========================================================
+ *
+ * The call tree gives us:
+ *
+ * - methodName
+ * - parameters
+ * - returnValue
+ * - callId
+ *
+ * The event gives us:
+ *
+ * - eventType
+ * - lineNumber
+ * - variables
+ * - returnValue
+ *
+ * We combine both so ExecutionState receives a
+ * complete and understandable state.
+ */
+
+function createPlaybackState(node, events) {
+
+    const event =
+        findBestEventForCall(
+            events,
+            node.callId
+        );
+
+
+    return {
+
+        /*
+         * Call tree information
+         */
+        callId:
+            node.callId,
+
+        methodName:
+            node.methodName,
+
+        parameters:
+            node.parameters || {},
+
+        returnValue:
+            node.returnValue ??
+            event?.returnValue ??
+            null,
+
+
+        /*
+         * Execution information
+         */
+        eventType:
+            event?.eventType ||
+            "METHOD_ENTER",
+
+        lineNumber:
+            event?.lineNumber ??
+            node.lineNumber ??
+            null,
+
+        callDepth:
+            event?.callDepth ??
+            node.callDepth ??
+            0,
+
+
+        /*
+         * Local variables
+         */
+        variables:
+            event?.variables ||
+            node.variables ||
+            {},
+
+    };
+}
+
+
+/*
+ * =========================================================
+ * APP
+ * =========================================================
+ */
 
 function App() {
 
-    const [sourceCode, setSourceCode] = useState(
-        `public class Test {
+    const [sourceCode, setSourceCode] =
+        useState(
+            `public class Test {
 
     public static void main(String[] args) {
 
@@ -35,23 +251,55 @@ function App() {
     }
 
 }`
-    );
+        );
 
-    const [execution, setExecution] = useState(null);
-    const [selectedEvent, setSelectedEvent] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+
+    const [execution, setExecution] =
+        useState(null);
+
+
+    const [playback, setPlayback] =
+        useState([]);
+
+
+    const [currentStep, setCurrentStep] =
+        useState(0);
+
+
+    const [loading, setLoading] =
+        useState(false);
+
+
+    const [error, setError] =
+        useState(null);
+
+
+    /*
+     * =========================================================
+     * RUN CODE
+     * =========================================================
+     */
 
     async function handleRun() {
 
         setLoading(true);
+
         setError(null);
+
         setExecution(null);
-        setSelectedEvent(null);
+
+        setPlayback([]);
+
+        setCurrentStep(0);
+
 
         try {
 
-            const result = await executeCode(sourceCode);
+            const result =
+                await executeCode(
+                    sourceCode
+                );
+
 
             if (!result.success) {
 
@@ -63,13 +311,54 @@ function App() {
                 return;
             }
 
-            setExecution(result.execution);
 
-        } catch (error) {
+            const trace =
+                result.execution;
+
+
+            setExecution(trace);
+
+
+            /*
+             * Build ONE state per call.
+             *
+             * This starts from main because the root
+             * of the call tree is main().
+             */
+            const calls =
+                buildCallPlayback(
+                    trace.callTree
+                );
+
+
+            /*
+             * Convert each call into a complete
+             * ExecutionState object.
+             */
+            const states =
+                calls.map(
+                    node =>
+                        createPlaybackState(
+                            node,
+                            trace.events || []
+                        )
+                );
+
+
+            setPlayback(states);
+
+            /*
+             * IMPORTANT:
+             *
+             * Start from MAIN.
+             */
+            setCurrentStep(0);
+
+        } catch (err) {
 
             setError(
-                error?.response?.data?.error ||
-                error?.message ||
+                err?.response?.data?.error ||
+                err?.message ||
                 "Unable to connect to backend."
             );
 
@@ -80,133 +369,222 @@ function App() {
         }
     }
 
+
+    /*
+     * =========================================================
+     * PREVIOUS
+     * =========================================================
+     */
+
+    function handlePrevious() {
+
+        setCurrentStep(
+            previous =>
+                Math.max(
+                    0,
+                    previous - 1
+                )
+        );
+    }
+
+
+    /*
+     * =========================================================
+     * NEXT
+     * =========================================================
+     */
+
+    function handleNext() {
+
+        setCurrentStep(
+            previous =>
+                Math.min(
+                    playback.length - 1,
+                    previous + 1
+                )
+        );
+    }
+
+
+    /*
+     * =========================================================
+     * CLICK NODE
+     * =========================================================
+     *
+     * Clicking a call tree node jumps directly to that
+     * call's playback state.
+     */
+
     function handleCallSelect(node) {
 
-        if (!execution) {
+        if (
+            !node ||
+            playback.length === 0
+        ) {
             return;
         }
 
-        const event = findFirstEventForCall(
-            execution.events,
-            node.callId
-        );
 
-        setSelectedEvent(event || null);
+        const index =
+            playback.findIndex(
+                state =>
+                    state.callId ===
+                    node.callId
+            );
+
+
+        if (index !== -1) {
+
+            setCurrentStep(index);
+
+        }
     }
 
+
+    /*
+     * =========================================================
+     * CURRENT STATE
+     * =========================================================
+     */
+
+    const currentState =
+        playback.length > 0
+            ? playback[currentStep]
+            : null;
+
+
+    /*
+     * =========================================================
+     * CURRENT NODE
+     * =========================================================
+     *
+     * This ID is passed into CallTree so the current
+     * playback node receives the blue highlight.
+     */
+
+    const selectedCallId =
+        currentState?.callId ??
+        null;
+
+
+    /*
+     * =========================================================
+     * DISPLAY PARAMETER TEXT
+     * =========================================================
+     */
+
+    function formatParameters(parameters) {
+
+        if (
+            !parameters ||
+            Object.keys(parameters).length === 0
+        ) {
+            return "";
+        }
+
+
+        return Object.entries(parameters)
+            .map(
+                ([key, value]) =>
+                    `${key}=${value}`
+            )
+            .join(", ");
+    }
+
+
+    /*
+     * =========================================================
+     * DISPLAY RETURN VALUE
+     * =========================================================
+     */
+
+    function formatReturnValue(value) {
+
+        if (
+            value === null ||
+            value === undefined
+        ) {
+            return "—";
+        }
+
+
+        return String(value);
+    }
+
+
+    /*
+     * =========================================================
+     * RENDER
+     * =========================================================
+     */
+
     return (
-        <div className="min-h-screen w-full overflow-x-hidden bg-[#0d1117] px-8 py-6 text-[#e6edf3]">
 
-            {/* =========================================
+        <div className="app">
+
+            {/* =================================================
                 HEADER
-               ========================================= */}
+            ================================================= */}
 
-            <header className="mb-6 flex w-full items-center justify-between">
+            <header className="app-header">
 
                 <div>
-                    <h1 className="m-0 text-[30px] font-bold tracking-[-0.5px] text-[#f0f6fc]">
+
+                    <h1 className="app-title">
                         AlgoTrace
                     </h1>
 
-                    <p className="mt-1 text-[14px] text-[#8b949e]">
+                    <p className="app-subtitle">
                         Visualize your code execution
                     </p>
+
                 </div>
 
+
                 <button
-                    className="
-                        shrink-0
-                        rounded-lg
-                        border
-                        border-[#5c7cff]
-                        bg-[#4f6fff]
-                        px-[22px]
-                        py-[10px]
-                        text-[14px]
-                        font-semibold
-                        text-white
-                        transition
-                        hover:bg-[#4161e8]
-                        disabled:cursor-not-allowed
-                        disabled:opacity-60
-                    "
+                    className="run-button"
                     onClick={handleRun}
                     disabled={loading}
                 >
-                    {loading ? "Running..." : "Run Code"}
+
+                    {loading
+                        ? "Running..."
+                        : "Run Code"}
+
                 </button>
 
             </header>
 
 
-            {/* =========================================
-                MAIN WORKSPACE
-               ========================================= */}
+            {/* =================================================
+                WORKSPACE
+            ================================================= */}
 
-            <main
-                className="
-                    grid
-                    w-full
-                    max-w-full
-                    grid-cols-1
-                    gap-5
-                    xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]
-                "
-            >
+            <main className="workspace">
 
-                {/* =========================================
+                {/* =================================================
                     SOURCE CODE
-                   ========================================= */}
+                ================================================= */}
 
-                <section
-                    className="
-                        flex
-                        h-[550px]
-                        min-w-0
-                        flex-col
-                        overflow-hidden
-                        rounded-[10px]
-                        border
-                        border-[#30363d]
-                        bg-[#161b22]
-                        xl:h-[620px]
-                    "
-                >
+                <section className="panel code-panel">
 
-                    <div
-                        className="
-                            flex
-                            min-h-[48px]
-                            items-center
-                            border-b
-                            border-[#30363d]
-                            bg-[#161b22]
-                            px-[18px]
-                        "
-                    >
-                        <h2 className="m-0 text-[14px] font-semibold text-[#e6edf3]">
+                    <div className="panel-header">
+
+                        <h2>
                             Source Code
                         </h2>
+
                     </div>
 
+
                     <textarea
-                        className="
-                            flex-1
-                            w-full
-                            min-w-0
-                            resize-none
-                            border-none
-                            bg-[#0d1117]
-                            p-5
-                            font-mono
-                            text-[14px]
-                            leading-[1.7]
-                            text-[#c9d1d9]
-                            outline-none
-                        "
+                        className="code-editor"
                         value={sourceCode}
-                        onChange={(event) =>
-                            setSourceCode(event.target.value)
+                        onChange={
+                            event =>
+                                setSourceCode(
+                                    event.target.value
+                                )
                         }
                         spellCheck={false}
                     />
@@ -214,65 +592,48 @@ function App() {
                 </section>
 
 
-                {/* =========================================
+                {/* =================================================
                     CALL TREE
-                   ========================================= */}
+                ================================================= */}
 
-                <section
-                    className="
-                        flex
-                        h-[550px]
-                        min-w-0
-                        flex-col
-                        overflow-hidden
-                        rounded-[10px]
-                        border
-                        border-[#30363d]
-                        bg-[#161b22]
-                        xl:h-[620px]
-                    "
-                >
+                <section className="panel tree-panel">
 
-                    <div
-                        className="
-                            flex
-                            min-h-[48px]
-                            items-center
-                            border-b
-                            border-[#30363d]
-                            bg-[#161b22]
-                            px-[18px]
-                        "
-                    >
-                        <h2 className="m-0 text-[14px] font-semibold text-[#e6edf3]">
+                    <div className="panel-header">
+
+                        <h2>
                             Call Tree
                         </h2>
+
                     </div>
 
-                    <div
-                        className="
-                            min-h-0
-                            w-full
-                            flex-1
-                            overflow-x-auto
-                            overflow-y-auto
-                            bg-[#0d1117]
-                        "
-                    >
+
+                    <div className="tree-container">
 
                         {execution ? (
 
                             <CallTree
-                                root={execution.callTree}
-                                onSelect={handleCallSelect}
+                                root={
+                                    execution.callTree
+                                }
+
+                                onSelect={
+                                    handleCallSelect
+                                }
+
+                                selectedCallId={
+                                    selectedCallId
+                                }
                             />
 
                         ) : (
 
-                            <div className="flex h-full items-center justify-center text-center text-[#6e7681]">
-                                <p className="m-0 text-[13px]">
-                                    Run your code to see the execution tree.
+                            <div className="empty-state">
+
+                                <p>
+                                    Run your code to see
+                                    the execution tree.
                                 </p>
+
                             </div>
 
                         )}
@@ -284,71 +645,129 @@ function App() {
             </main>
 
 
-            {/* =========================================
+            {/* =================================================
                 ERROR
-               ========================================= */}
+            ================================================= */}
 
             {error && (
 
-                <div
-                    className="
-                        mt-4
-                        w-full
-                        rounded-lg
-                        border
-                        border-[#8e3b46]
-                        bg-[#2d1519]
-                        px-4
-                        py-3
-                        text-[14px]
-                        text-[#ff7b72]
-                    "
-                >
+                <div className="error-message">
                     {error}
                 </div>
 
             )}
 
 
-            {/* =========================================
+            {/* =================================================
+                PLAYBACK
+            ================================================= */}
+
+            {playback.length > 0 && (
+
+                <div className="playback-panel">
+
+                    {/* PREVIOUS */}
+
+                    <button
+                        className="playback-button"
+                        onClick={
+                            handlePrevious
+                        }
+                        disabled={
+                            currentStep === 0
+                        }
+                    >
+
+                        ← Previous
+
+                    </button>
+
+
+                    {/* CURRENT CALL */}
+
+                    <div className="playback-info">
+
+                        <div className="playback-step">
+
+                            Call{" "}
+                            {currentStep + 1}
+                            {" "}
+                            of{" "}
+                            {playback.length}
+
+                        </div>
+
+
+                        {currentState && (
+
+                            <div className="playback-method">
+
+                                {currentState.methodName}
+
+                                {"("}
+
+                                {formatParameters(
+                                    currentState.parameters
+                                )}
+
+                                {")"}
+
+                                {" → "}
+
+                                {formatReturnValue(
+                                    currentState.returnValue
+                                )}
+
+                            </div>
+
+                        )}
+
+                    </div>
+
+
+                    {/* NEXT */}
+
+                    <button
+                        className="playback-button"
+                        onClick={
+                            handleNext
+                        }
+                        disabled={
+                            currentStep >=
+                            playback.length - 1
+                        }
+                    >
+
+                        Next →
+
+                    </button>
+
+                </div>
+
+            )}
+
+
+            {/* =================================================
                 EXECUTION STATE
-               ========================================= */}
+            ================================================= */}
 
             {execution && (
 
-                <section
-                    className="
-                        mt-5
-                        flex
-                        w-full
-                        min-w-0
-                        flex-col
-                        overflow-hidden
-                        rounded-[10px]
-                        border
-                        border-[#30363d]
-                        bg-[#161b22]
-                    "
-                >
+                <section className="panel state-panel">
 
-                    <div
-                        className="
-                            flex
-                            min-h-[48px]
-                            items-center
-                            border-b
-                            border-[#30363d]
-                            bg-[#161b22]
-                            px-[18px]
-                        "
-                    >
-                        <h2 className="m-0 text-[14px] font-semibold text-[#e6edf3]">
+                    <div className="panel-header">
+
+                        <h2>
                             Execution State
                         </h2>
+
                     </div>
 
+
                     <ExecutionState
-                        event={selectedEvent}
+                        event={
+                            currentState
+                        }
                     />
 
                 </section>
@@ -358,5 +777,6 @@ function App() {
         </div>
     );
 }
+
 
 export default App;

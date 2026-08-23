@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* =========================================================
+   GLOBAL
+   ========================================================= */
+
 html,
 body,
 #root {
@@ -7,7 +11,981 @@ body,
     min-height: 100%;
 }
 
+* {
+    box-sizing: border-box;
+}
+
 body {
     background: #0d1117;
     color: #e6edf3;
+    font-family:
+        Inter,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+}
+
+
+/* =========================================================
+   APP
+   ========================================================= */
+
+.app {
+    min-height: 100vh;
+    padding: 24px 28px 40px;
+    background: #0d1117;
+    color: #e6edf3;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 24px;
+}
+
+.app-title {
+    margin: 0;
+
+    font-size: 28px;
+    font-weight: 700;
+
+    color: #f0f6fc;
+}
+
+.app-subtitle {
+    margin: 4px 0 0;
+
+    font-size: 13px;
+    color: #8b949e;
+}
+
+
+/* =========================================================
+   RUN BUTTON
+   ========================================================= */
+
+.run-button {
+    padding: 10px 20px;
+
+    border: none;
+    border-radius: 7px;
+
+    background: #4f6ff7;
+    color: white;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s ease,
+        transform 0.2s ease;
+}
+
+.run-button:hover:not(:disabled) {
+    background: #5d7cff;
+    transform: translateY(-1px);
+}
+
+.run-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   WORKSPACE
+   ========================================================= */
+
+.workspace {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(0, 1fr);
+
+    gap: 16px;
+
+    width: 100%;
+}
+
+
+/* =========================================================
+   PANEL
+   ========================================================= */
+
+.panel {
+    overflow: hidden;
+
+    border: 1px solid #30363d;
+    border-radius: 8px;
+
+    background: #161b22;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+
+    height: 40px;
+
+    padding: 0 14px;
+
+    border-bottom: 1px solid #30363d;
+
+    background: #161b22;
+}
+
+.panel-header h2 {
+    margin: 0;
+
+    font-size: 12px;
+    font-weight: 600;
+
+    color: #f0f6fc;
+}
+
+
+/* =========================================================
+   SOURCE CODE
+   ========================================================= */
+
+.code-panel {
+    min-width: 0;
+    height: 570px;
+}
+
+.code-editor {
+    display: block;
+
+    width: 100%;
+    height: calc(570px - 41px);
+
+    min-height: 520px;
+
+    padding: 18px;
+
+    box-sizing: border-box;
+
+    border: none;
+    outline: none;
+
+    resize: none;
+
+    background: #0d1117;
+    color: #c9d1d9;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        Consolas,
+        monospace;
+
+    font-size: 13px;
+    line-height: 1.75;
+
+    tab-size: 4;
+}
+
+
+/* =========================================================
+   CALL TREE PANEL
+   ========================================================= */
+
+.tree-panel {
+    min-width: 0;
+    height: 570px;
+}
+
+.tree-container {
+    position: relative;
+
+    height: calc(570px - 41px);
+    min-height: 520px;
+
+    overflow: auto;
+
+    background: #0d1117;
+
+    padding: 28px;
+}
+
+
+/*
+ * The actual tree can become wider than the panel.
+ * Horizontal scrolling is therefore intentional.
+ */
+
+.tree-container > div {
+    width: max-content;
+    min-width: 100%;
+}
+
+
+/* =========================================================
+   RECURSION TREE
+   ========================================================= */
+
+.recursion-tree {
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    width: max-content;
+    min-width: 100%;
+
+    padding: 12px 40px 40px;
+}
+
+
+/* =========================================================
+   MAIN CALL
+   ========================================================= */
+
+.main-call {
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    width: max-content;
+}
+
+
+/*
+ * Vertical line from main -> first algorithm call
+ */
+
+.main-connector {
+    width: 1px;
+    height: 22px;
+
+    background: #46515f;
+}
+
+
+/* =========================================================
+   RECURSION SUBTREE
+   ========================================================= */
+
+.recursion-subtree {
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    width: max-content;
+
+    flex-shrink: 0;
+}
+
+
+/* =========================================================
+   NODE WRAPPER
+   ========================================================= */
+
+.recursion-node-wrapper {
+    position: relative;
+
+    display: flex;
+    justify-content: center;
+
+    width: max-content;
+
+    z-index: 5;
+}
+
+
+/* =========================================================
+   NODE CARD
+   ========================================================= */
+
+.recursion-node {
+    position: relative;
+
+    width: 116px;
+    min-height: 74px;
+
+    padding: 10px 8px;
+
+    border: 1px solid #303b4a;
+    border-radius: 7px;
+
+    background: #1b2430;
+
+    color: #f0f6fc;
+
+    cursor: pointer;
+
+    text-align: center;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        Consolas,
+        monospace;
+
+    transition:
+        border-color 0.18s ease,
+        background 0.18s ease,
+        box-shadow 0.18s ease,
+        transform 0.18s ease;
+}
+
+.recursion-node:hover {
+    border-color: #53627a;
+
+    background: #202a37;
+
+    transform: translateY(-1px);
+}
+
+
+/* =========================================================
+   ACTIVE / HIGHLIGHTED NODE
+   ========================================================= */
+
+.recursion-node.active,
+.recursion-node.selected {
+    border-color: #6685ff;
+
+    background: #243b68;
+
+    box-shadow:
+        0 0 0 1px #6685ff,
+        0 0 14px rgba(79, 111, 247, 0.35);
+}
+
+
+/*
+ * Blue indicator on the left side of active node.
+ */
+
+.recursion-node.active::before,
+.recursion-node.selected::before {
+    content: "";
+
+    position: absolute;
+
+    left: -5px;
+    top: 50%;
+
+    width: 7px;
+    height: 7px;
+
+    border-radius: 50%;
+
+    background: #6685ff;
+
+    transform: translateY(-50%);
+
+    box-shadow: 0 0 8px rgba(102, 133, 255, 0.8);
+}
+
+
+/* =========================================================
+   NODE CONTENT
+   ========================================================= */
+
+.node-method {
+    margin-bottom: 5px;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    color: #f0f6fc;
+}
+
+.node-parameters {
+    min-height: 15px;
+
+    overflow: hidden;
+
+    font-size: 9px;
+
+    color: #8b949e;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.node-return {
+    margin-top: 4px;
+
+    font-size: 10px;
+    font-weight: 600;
+
+    color: #56d364;
+
+    white-space: nowrap;
+}
+
+
+/* =========================================================
+   PARENT -> CHILDREN CONNECTOR
+   ========================================================= */
+
+/*
+ * This connector sits BETWEEN the parent node
+ * and the child row.
+ *
+ * Example:
+ *
+ *                 parent
+ *                   |
+ *             ------+------
+ *             |           |
+ *           child       child
+ *
+ */
+
+.tree-connector {
+    position: relative;
+
+    width: 100%;
+    height: 32px;
+
+    flex-shrink: 0;
+
+    z-index: 1;
+}
+
+
+/*
+ * Vertical line coming down from parent.
+ */
+
+.tree-connector .vertical-line {
+    position: absolute;
+
+    top: 0;
+    left: 50%;
+
+    width: 1px;
+    height: 16px;
+
+    background: #46515f;
+
+    transform: translateX(-50%);
+}
+
+
+/*
+ * Horizontal line connecting the two child branches.
+ *
+ * The width is based on:
+ *
+ * node width = 116px
+ * child gap  = 40px
+ *
+ * 116 + 40 + 116 = 272px
+ *
+ * This gives:
+ *
+ *          |--------|
+ *          |        |
+ */
+
+.tree-connector .horizontal-line {
+    position: absolute;
+
+    top: 16px;
+    left: 50%;
+
+    width: 156px;
+    height: 1px;
+
+    background: #46515f;
+
+    transform: translateX(-50%);
+}
+
+
+/* =========================================================
+   CHILDREN ROW
+   ========================================================= */
+
+.recursion-children {
+    position: relative;
+
+    display: flex;
+
+    align-items: flex-start;
+    justify-content: center;
+
+    gap: 40px;
+
+    width: max-content;
+
+    flex-shrink: 0;
+}
+
+
+/* =========================================================
+   INDIVIDUAL CHILD
+   ========================================================= */
+
+.recursion-child {
+    position: relative;
+
+    display: flex;
+    justify-content: center;
+
+    width: 116px;
+
+    flex: 0 0 116px;
+}
+
+
+/*
+ * Vertical line from horizontal branch
+ * down to LEFT child.
+ */
+
+.recursion-child.left-child::before {
+    content: "";
+
+    position: absolute;
+
+    top: -16px;
+    left: 50%;
+
+    width: 1px;
+    height: 16px;
+
+    background: #46515f;
+
+    transform: translateX(-50%);
+
+    z-index: 2;
+}
+
+
+/*
+ * Vertical line from horizontal branch
+ * down to RIGHT child.
+ */
+
+.recursion-child.right-child::before {
+    content: "";
+
+    position: absolute;
+
+    top: -16px;
+    left: 50%;
+
+    width: 1px;
+    height: 16px;
+
+    background: #46515f;
+
+    transform: translateX(-50%);
+
+    z-index: 2;
+}
+
+
+/*
+ * We intentionally DON'T create additional
+ * horizontal lines here.
+ */
+
+.recursion-child.left-child::after,
+.recursion-child.right-child::after {
+    content: none;
+}
+
+
+/* =========================================================
+   EMPTY CHILD
+   ========================================================= */
+
+.empty-child {
+    width: 116px;
+    height: 74px;
+}
+
+
+/* =========================================================
+   PLAYBACK
+   ========================================================= */
+
+.playback-panel {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        auto
+        1fr;
+
+    align-items: center;
+
+    min-height: 74px;
+
+    margin-top: 14px;
+
+    padding: 10px 14px;
+
+    border: 1px solid #30363d;
+    border-radius: 8px;
+
+    background: #161b22;
+}
+
+.playback-button {
+    width: fit-content;
+
+    padding: 9px 18px;
+
+    border: 1px solid #30363d;
+    border-radius: 6px;
+
+    background: #1c232d;
+    color: #f0f6fc;
+
+    font-size: 12px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.playback-button:hover:not(:disabled) {
+    border-color: #6685ff;
+    background: #252e3a;
+}
+
+.playback-button:last-child {
+    justify-self: end;
+}
+
+.playback-button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.playback-info {
+    text-align: center;
+}
+
+.playback-step {
+    font-size: 12px;
+    font-weight: 700;
+
+    color: #f0f6fc;
+}
+
+.playback-method {
+    margin-top: 4px;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        monospace;
+
+    font-size: 11px;
+
+    color: #6685ff;
+}
+
+
+/* =========================================================
+   EXECUTION STATE
+   ========================================================= */
+
+.state-panel {
+    margin-top: 14px;
+}
+
+.execution-state {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+
+    gap: 12px;
+
+    padding: 14px;
+}
+
+.state-section {
+    min-width: 0;
+    min-height: 150px;
+
+    padding: 14px;
+
+    border: 1px solid #30363d;
+    border-radius: 7px;
+
+    background: #0d1117;
+}
+
+.state-section h3 {
+    margin: 0 0 16px;
+
+    font-size: 10px;
+    font-weight: 700;
+
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+
+    color: #8b949e;
+}
+
+.state-row,
+.variable-row {
+    display: flex;
+
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    padding: 5px 0;
+
+    font-size: 12px;
+}
+
+.state-row span,
+.variable-row span {
+    color: #8b949e;
+}
+
+.state-row strong,
+.variable-row strong {
+    max-width: 70%;
+
+    overflow: hidden;
+
+    text-align: right;
+    text-overflow: ellipsis;
+
+    color: #f0f6fc;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        monospace;
+
+    font-size: 11px;
+}
+
+.return-value {
+    color: #56d364;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        monospace;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    word-break: break-word;
+}
+
+.muted {
+    margin: 0;
+
+    color: #6e7681;
+
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
+
+.empty-state {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    height: 100%;
+
+    color: #6e7681;
+
+    font-size: 12px;
+
+    text-align: center;
+}
+
+
+/* =========================================================
+   CALL TREE EMPTY
+   ========================================================= */
+
+.call-tree-empty {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 300px;
+
+    color: #6e7681;
+
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.error-message {
+    margin-top: 14px;
+
+    padding: 12px 14px;
+
+    border: 1px solid #6e3030;
+    border-radius: 7px;
+
+    background: #2d1515;
+
+    color: #ff7b72;
+
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   SCROLLBAR
+   ========================================================= */
+
+.tree-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.tree-container::-webkit-scrollbar-track {
+    background: #0d1117;
+}
+
+.tree-container::-webkit-scrollbar-thumb {
+    background: #30363d;
+
+    border-radius: 6px;
+}
+
+.tree-container::-webkit-scrollbar-thumb:hover {
+    background: #46515f;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1000px) {
+
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .code-panel,
+    .tree-panel {
+        height: 520px;
+    }
+
+    .code-editor {
+        height: calc(520px - 41px);
+        min-height: 470px;
+    }
+
+    .tree-container {
+        height: calc(520px - 41px);
+        min-height: 470px;
+    }
+
+    .execution-state {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+}
+
+
+@media (max-width: 600px) {
+
+    .app {
+        padding: 16px;
+    }
+
+    .app-header {
+        align-items: flex-start;
+
+        gap: 16px;
+    }
+
+    .app-title {
+        font-size: 24px;
+    }
+
+    .workspace {
+        gap: 12px;
+    }
+
+    .code-panel,
+    .tree-panel {
+        height: 450px;
+    }
+
+    .code-editor {
+        height: calc(450px - 41px);
+
+        min-height: 400px;
+
+        font-size: 12px;
+    }
+
+    .tree-container {
+        height: calc(450px - 41px);
+
+        min-height: 400px;
+
+        padding: 20px;
+    }
+
+    .playback-panel {
+        grid-template-columns:
+            1fr 1fr;
+
+        gap: 10px;
+    }
+
+    .playback-info {
+        grid-column: 1 / -1;
+
+        grid-row: 1;
+    }
+
+    .playback-button {
+        grid-row: 2;
+    }
+
+    .playback-button:last-child {
+        justify-self: end;
+    }
+
+    .execution-state {
+        grid-template-columns: 1fr;
+    }
 }

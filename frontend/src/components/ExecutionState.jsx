@@ -2,382 +2,165 @@ export default function ExecutionState({ event }) {
 
     if (!event) {
         return (
-            <div
-                className="
-                    flex
-                    min-h-[110px]
-                    items-center
-                    justify-center
-                    px-5
-                    py-6
-                    text-center
-                    text-[13px]
-                    text-[#6e7681]
-                "
-            >
+            <div className="execution-state empty-state">
                 <p>
-                    Select a call or execution step to inspect its state.
+                    Select a call or execution step
+                    to inspect its state.
                 </p>
             </div>
         );
     }
 
-    const parameters =
-        event.parameters || {};
-
-    const variables =
-        event.variables || {};
-
+    const parameters = event.parameters || {};
+    const variables = event.variables || {};
 
     return (
-        <div
-            className="
-                grid
-                grid-cols-1
-                gap-3
-                p-4
-                sm:grid-cols-2
-                lg:grid-cols-4
-            "
-        >
+        <div className="execution-state">
 
-            {/* =================================================
+            {/* =========================
                 EXECUTION
-               ================================================= */}
+               ========================= */}
 
-            <div
-                className="
-                    rounded-lg
-                    border
-                    border-[#252d38]
-                    bg-[#0d1117]
-                    p-4
-                "
-            >
+            <div className="state-section">
 
-                <h3
-                    className="
-                        mb-4
-                        text-[11px]
-                        font-semibold
-                        uppercase
-                        tracking-wide
-                        text-[#8b949e]
-                    "
-                >
-                    Execution
-                </h3>
+                <h3>Execution</h3>
 
+                <div className="state-row">
+                    <span>Event</span>
+                    <strong>
+                        {event.eventType || "—"}
+                    </strong>
+                </div>
 
-                <div
-                    className="
-                        flex
-                        flex-col
-                        gap-3
-                    "
-                >
+                <div className="state-row">
+                    <span>Method</span>
+                    <strong>
+                        {event.methodName || "—"}
+                    </strong>
+                </div>
 
-                    <StateRow
-                        label="Event"
-                        value={event.eventType}
-                    />
+                <div className="state-row">
+                    <span>Line</span>
+                    <strong>
+                        {event.lineNumber ?? "—"}
+                    </strong>
+                </div>
 
-                    <StateRow
-                        label="Method"
-                        value={event.methodName}
-                    />
+                <div className="state-row">
+                    <span>Call ID</span>
+                    <strong>
+                        {event.callId ?? "—"}
+                    </strong>
+                </div>
 
-                    <StateRow
-                        label="Line"
-                        value={event.lineNumber}
-                    />
-
-                    <StateRow
-                        label="Call ID"
-                        value={event.callId}
-                    />
-
-                    <StateRow
-                        label="Depth"
-                        value={event.callDepth}
-                    />
-
+                <div className="state-row">
+                    <span>Depth</span>
+                    <strong>
+                        {event.callDepth ?? "—"}
+                    </strong>
                 </div>
 
             </div>
 
 
-            {/* =================================================
+            {/* =========================
                 PARAMETERS
-               ================================================= */}
+               ========================= */}
 
-            <div
-                className="
-                    rounded-lg
-                    border
-                    border-[#252d38]
-                    bg-[#0d1117]
-                    p-4
-                "
-            >
+            <div className="state-section">
 
-                <h3
-                    className="
-                        mb-4
-                        text-[11px]
-                        font-semibold
-                        uppercase
-                        tracking-wide
-                        text-[#8b949e]
-                    "
-                >
-                    Parameters
-                </h3>
-
+                <h3>Parameters</h3>
 
                 {Object.keys(parameters).length === 0 ? (
 
-                    <p
-                        className="
-                            text-[12px]
-                            text-[#6e7681]
-                        "
-                    >
+                    <p className="muted">
                         No parameters
                     </p>
 
                 ) : (
 
-                    <div
-                        className="
-                            flex
-                            flex-col
-                            gap-3
-                        "
-                    >
+                    Object.entries(parameters).map(
+                        ([name, value]) => (
 
-                        {Object.entries(parameters).map(
-                            ([name, value]) => (
+                            <div
+                                className="variable-row"
+                                key={name}
+                            >
 
-                                <VariableRow
-                                    key={name}
-                                    name={name}
-                                    value={value}
-                                />
+                                <span>
+                                    {name}
+                                </span>
 
-                            )
-                        )}
+                                <strong>
+                                    {String(value)}
+                                </strong>
 
-                    </div>
-
+                            </div>
+                        )
+                    )
                 )}
 
             </div>
 
 
-            {/* =================================================
+            {/* =========================
                 VARIABLES
-               ================================================= */}
+               ========================= */}
 
-            <div
-                className="
-                    rounded-lg
-                    border
-                    border-[#252d38]
-                    bg-[#0d1117]
-                    p-4
-                "
-            >
+            <div className="state-section">
 
-                <h3
-                    className="
-                        mb-4
-                        text-[11px]
-                        font-semibold
-                        uppercase
-                        tracking-wide
-                        text-[#8b949e]
-                    "
-                >
-                    Variables
-                </h3>
-
+                <h3>Variables</h3>
 
                 {Object.keys(variables).length === 0 ? (
 
-                    <p
-                        className="
-                            text-[12px]
-                            text-[#6e7681]
-                        "
-                    >
+                    <p className="muted">
                         No local variables
                     </p>
 
                 ) : (
 
-                    <div
-                        className="
-                            flex
-                            flex-col
-                            gap-3
-                        "
-                    >
+                    Object.entries(variables).map(
+                        ([name, value]) => (
 
-                        {Object.entries(variables).map(
-                            ([name, value]) => (
+                            <div
+                                className="variable-row"
+                                key={name}
+                            >
 
-                                <VariableRow
-                                    key={name}
-                                    name={name}
-                                    value={value}
-                                />
+                                <span>
+                                    {name}
+                                </span>
 
-                            )
-                        )}
+                                <strong>
+                                    {String(value)}
+                                </strong>
 
-                    </div>
-
+                            </div>
+                        )
+                    )
                 )}
 
             </div>
 
 
-            {/* =================================================
+            {/* =========================
                 RETURN VALUE
-               ================================================= */}
+               ========================= */}
 
-            <div
-                className="
-                    rounded-lg
-                    border
-                    border-[#252d38]
-                    bg-[#0d1117]
-                    p-4
-                "
-            >
+            <div className="state-section">
 
-                <h3
-                    className="
-                        mb-4
-                        text-[11px]
-                        font-semibold
-                        uppercase
-                        tracking-wide
-                        text-[#8b949e]
-                    "
-                >
-                    Return Value
-                </h3>
+                <h3>Return Value</h3>
 
+                <div className="return-value">
 
-                <div
-                    className="
-                        break-all
-                        font-mono
-                        text-[13px]
-                        font-semibold
-                        text-[#56d364]
-                    "
-                >
-                    {event.returnValue ?? "—"}
+                    {event.returnValue !== null &&
+                    event.returnValue !== undefined
+                        ? String(event.returnValue)
+                        : "—"}
+
                 </div>
 
             </div>
-
-        </div>
-    );
-}
-
-
-/* =========================================================
-   STATE ROW
-   ========================================================= */
-
-function StateRow({
-    label,
-    value
-}) {
-
-    return (
-        <div
-            className="
-                flex
-                items-center
-                justify-between
-                gap-3
-                text-[12px]
-            "
-        >
-
-            <span
-                className="
-                    text-[#8b949e]
-                "
-            >
-                {label}
-            </span>
-
-            <strong
-                className="
-                    max-w-[65%]
-                    truncate
-                    text-right
-                    font-semibold
-                    text-[#f0f6fc]
-                "
-                title={String(value ?? "")}
-            >
-                {value}
-            </strong>
-
-        </div>
-    );
-}
-
-
-/* =========================================================
-   VARIABLE ROW
-   ========================================================= */
-
-function VariableRow({
-    name,
-    value
-}) {
-
-    return (
-        <div
-            className="
-                flex
-                items-start
-                justify-between
-                gap-3
-                text-[12px]
-            "
-        >
-
-            <span
-                className="
-                    shrink-0
-                    text-[#8b949e]
-                "
-            >
-                {name}
-            </span>
-
-            <strong
-                className="
-                    max-w-[70%]
-                    break-all
-                    text-right
-                    font-mono
-                    font-semibold
-                    text-[#f0f6fc]
-                "
-                title={String(value ?? "")}
-            >
-                {value}
-            </strong>
 
         </div>
     );
