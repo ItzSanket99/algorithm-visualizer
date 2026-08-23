@@ -989,3 +989,233 @@ body {
         grid-template-columns: 1fr;
     }
 }
+/* =========================================================
+   SOURCE CODE VIEWER
+   ========================================================= */
+
+/* =========================================================
+   CODE VIEWER
+   ========================================================= */
+
+.code-viewer {
+    position: relative;
+
+    width: 100%;
+    height: calc(570px - 41px);
+
+    min-height: 520px;
+
+    overflow: hidden;
+
+    background: #0d1117;
+}
+
+
+/* =========================================================
+   HIGHLIGHT LAYER
+   ========================================================= */
+
+.code-highlight-layer {
+    position: absolute;
+
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    padding-top: 18px;
+
+    overflow: hidden;
+
+    pointer-events: none;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        Consolas,
+        monospace;
+
+    font-size: 13px;
+    line-height: 22px;
+
+    white-space: pre;
+
+    z-index: 1;
+}
+
+
+/* =========================================================
+   CODE LINE
+   ========================================================= */
+
+.code-line {
+    display: flex;
+
+    width: max-content;
+    min-width: 100%;
+
+    height: 22px;
+
+    background: transparent;
+}
+
+
+/* =========================================================
+   LINE NUMBER
+   ========================================================= */
+
+.line-number {
+    display: block;
+
+    width: 50px;
+
+    flex-shrink: 0;
+
+    padding-right: 12px;
+
+    text-align: right;
+
+    color: #484f58;
+
+    border-right: 1px solid #21262d;
+
+    user-select: none;
+}
+
+
+/* =========================================================
+   SOURCE TEXT
+   ========================================================= */
+
+.line-content {
+    display: block;
+
+    padding-left: 14px;
+
+    color: #c9d1d9;
+
+    white-space: pre;
+}
+
+
+/* =========================================================
+   ACTIVE LINE
+   ========================================================= */
+
+.code-line-active {
+    background: rgba(79, 111, 247, 0.20);
+
+    box-shadow:
+        inset 3px 0 0 #6685ff;
+}
+
+
+/* Active line number */
+
+.code-line-active .line-number {
+    color: #6685ff;
+
+    font-weight: 700;
+
+    background: rgba(79, 111, 247, 0.10);
+}
+
+
+/* Active source */
+
+.code-line-active .line-content {
+    color: #ffffff;
+
+    font-weight: 500;
+}
+
+
+/* =========================================================
+   TEXTAREA
+   ========================================================= */
+
+.code-editor-overlay {
+    position: absolute;
+
+    top: 0;
+    left: 0;
+
+    width: 100%;
+    height: 100%;
+
+    padding-top: 18px;
+    padding-left: 64px;
+    padding-right: 18px;
+    padding-bottom: 18px;
+
+    box-sizing: border-box;
+
+    border: none;
+    outline: none;
+
+    resize: none;
+
+    background: transparent;
+
+    /*
+     * IMPORTANT:
+     *
+     * Text itself is transparent because the visible
+     * source code comes from the highlight layer.
+     *
+     * The caret remains visible.
+     */
+    color: transparent;
+
+    caret-color: #f0f6fc;
+
+    font-family:
+        "JetBrains Mono",
+        "Fira Code",
+        Consolas,
+        monospace;
+
+    font-size: 13px;
+    line-height: 22px;
+
+    tab-size: 4;
+
+    white-space: pre;
+
+    overflow: auto;
+
+    z-index: 2;
+}
+
+
+/* =========================================================
+   TEXT SELECTION
+   ========================================================= */
+
+.code-editor-overlay::selection {
+    background: rgba(102, 133, 255, 0.35);
+}
+
+
+/* =========================================================
+   SCROLLBAR
+   ========================================================= */
+
+.code-editor-overlay::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.code-editor-overlay::-webkit-scrollbar-track {
+    background: #0d1117;
+}
+
+.code-editor-overlay::-webkit-scrollbar-thumb {
+    background: #30363d;
+
+    border-radius: 6px;
+}
+
+.code-editor-overlay::-webkit-scrollbar-thumb:hover {
+    background: #46515f;
+}

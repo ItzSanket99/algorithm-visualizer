@@ -3,6 +3,7 @@ import { useState } from "react";
 import { executeCode } from "./services/executionApi";
 import CallTree from "./components/CallTree";
 import ExecutionState from "./components/ExecutionState";
+import CodeViewer from "./components/CodeViewer";
 
 
 /*
@@ -12,10 +13,10 @@ import ExecutionState from "./components/ExecutionState";
  *
  * We intentionally create ONE playback state per call.
  *
- * We do NOT use every raw execution event because that
- * produces dozens of unnecessary Previous / Next steps.
+ * This keeps playback useful for students instead of
+ * forcing them through every raw execution event.
  *
- * Order:
+ * Example:
  *
  * main
  *   ↓
@@ -30,8 +31,6 @@ import ExecutionState from "./components/ExecutionState";
  * fib(0)
  *   ↓
  * ...
- *
- * This is a preorder traversal of the call tree.
  */
 
 function buildCallPlayback(root) {
@@ -50,20 +49,13 @@ function buildCallPlayback(root) {
         }
 
         /*
-         * Add current call first.
+         * Preorder traversal:
+         *
+         * current node first
+         * then children from left to right
          */
         result.push(node);
 
-
-        /*
-         * Then visit children from left to right.
-         *
-         * This preserves the actual recursive
-         * call structure:
-         *
-         * fib(n - 1)
-         * fib(n - 2)
-         */
         const children =
             node.children || [];
 
@@ -81,101 +73,153 @@ function buildCallPlayback(root) {
 
 /*
  * =========================================================
- * FIND EVENT FOR CALL
+ * FIND EXIT EVENT
  * =========================================================
  *
- * The call tree contains the structural information.
- * The execution events contain the detailed state.
+ * Used mainly for:
  *
- * We use the callId to find the most useful event for
- * that particular call.
+ * - return value
+ * - final state of the call
  */
 
-function findBestEventForCall(events, callId) {
+function findExitEvent(events, callId) {
 
     if (!events || callId == null) {
         return null;
     }
 
-
-    /*
-     * Prefer METHOD_EXIT because it normally contains
-     * the final return value.
-     */
-    const exitEvent =
+    return (
         events.find(
             event =>
                 event.callId === callId &&
                 event.eventType === "METHOD_EXIT"
-        );
-
-    if (exitEvent) {
-        return exitEvent;
-    }
-
-
-    /*
-     * Otherwise use METHOD_ENTER.
-     */
-    const enterEvent =
-        events.find(
-            event =>
-                event.callId === callId &&
-                event.eventType === "METHOD_ENTER"
-        );
-
-    if (enterEvent) {
-        return enterEvent;
-    }
-
-
-    /*
-     * Finally use any event belonging to the call.
-     */
-    return events.find(
-        event =>
-            event.callId === callId
-    ) || null;
+        ) || null
+    );
 }
 
 
 /*
  * =========================================================
- * MERGE CALL NODE + EVENT
+ * FIND LINE EVENT
  * =========================================================
  *
- * The call tree gives us:
+ * A METHOD_EXIT event may not point to the most useful
+ * source line.
+ *
+ * Therefore we find the LAST LINE_EXECUTED event belonging
+ * to this call.
+ *
+ * This gives the source-code viewer a meaningful line
+ * to highlight for the call-level playback state.
+ */
+
+function findLastLineEvent(events, callId) {
+
+    if (!events || callId == null) {
+        return null;
+    }
+
+    const lineEvents =
+        events.filter(
+            event =>
+                event.callId === callId &&
+                event.eventType === "LINE_EXECUTED"
+        );
+
+    if (lineEvents.length === 0) {
+        return null;
+    }
+
+    return lineEvents[lineEvents.length - 1];
+}
+
+
+/*
+ * =========================================================
+ * FIND ENTER EVENT
+ * =========================================================
+ */
+
+function findEnterEvent(events, callId) {
+
+    if (!events || callId == null) {
+        return null;
+    }
+
+    return (
+        events.find(
+            event =>
+                event.callId === callId &&
+                event.eventType === "METHOD_ENTER"
+        ) || null
+    );
+}
+
+
+/*
+ * =========================================================
+ * MERGE CALL NODE + EVENTS
+ * =========================================================
+ *
+ * The call tree provides:
  *
  * - methodName
  * - parameters
  * - returnValue
  * - callId
  *
- * The event gives us:
+ * Execution events provide:
  *
- * - eventType
  * - lineNumber
  * - variables
  * - returnValue
+ * - eventType
+ * - callDepth
  *
- * We combine both so ExecutionState receives a
- * complete and understandable state.
+ * We combine them into one clean playback state.
  */
 
 function createPlaybackState(node, events) {
 
-    const event =
-        findBestEventForCall(
+    const exitEvent =
+        findExitEvent(
+            events,
+            node.callId
+        );
+
+    const lineEvent =
+        findLastLineEvent(
+            events,
+            node.callId
+        );
+
+    const enterEvent =
+        findEnterEvent(
             events,
             node.callId
         );
 
 
+    /*
+     * Prefer the line event for source highlighting.
+     *
+     * If there isn't one, fall back to the enter event
+     * and finally the call-tree node.
+     */
+    const displayEvent =
+        lineEvent ||
+        enterEvent ||
+        exitEvent;
+
+
     return {
 
         /*
-         * Call tree information
+         * =================================================
+         * CALL INFORMATION
+         * =================================================
          */
+
         callId:
             node.callId,
 
@@ -183,40 +227,74 @@ function createPlaybackState(node, events) {
             node.methodName,
 
         parameters:
-            node.parameters || {},
+            node.parameters ||
+            enterEvent?.parameters ||
+            {},
+
+
+        /*
+         * =================================================
+         * RETURN VALUE
+         * =================================================
+         *
+         * Return value should come from METHOD_EXIT first.
+         */
 
         returnValue:
+            exitEvent?.returnValue ??
             node.returnValue ??
-            event?.returnValue ??
             null,
 
 
         /*
-         * Execution information
+         * =================================================
+         * SOURCE LINE
+         * =================================================
+         *
+         * IMPORTANT:
+         *
+         * This is what CodeViewer uses to highlight
+         * the current source-code row.
          */
-        eventType:
-            event?.eventType ||
-            "METHOD_ENTER",
 
         lineNumber:
-            event?.lineNumber ??
+            displayEvent?.lineNumber ??
             node.lineNumber ??
             null,
 
+
+        /*
+         * =================================================
+         * EVENT INFORMATION
+         * =================================================
+         */
+
+        eventType:
+            displayEvent?.eventType ||
+            "METHOD_ENTER",
+
         callDepth:
-            event?.callDepth ??
+            displayEvent?.callDepth ??
             node.callDepth ??
             0,
 
 
         /*
-         * Local variables
+         * =================================================
+         * VARIABLES
+         * =================================================
+         *
+         * Prefer the last LINE_EXECUTED state because
+         * it usually represents the most useful local
+         * state for this call.
          */
-        variables:
-            event?.variables ||
-            node.variables ||
-            {},
 
+        variables:
+            lineEvent?.variables ||
+            exitEvent?.variables ||
+            enterEvent?.variables ||
+            node.variables ||
+            {}
     };
 }
 
@@ -320,10 +398,7 @@ function App() {
 
 
             /*
-             * Build ONE state per call.
-             *
-             * This starts from main because the root
-             * of the call tree is main().
+             * Build one playback state per call.
              */
             const calls =
                 buildCallPlayback(
@@ -331,10 +406,6 @@ function App() {
                 );
 
 
-            /*
-             * Convert each call into a complete
-             * ExecutionState object.
-             */
             const states =
                 calls.map(
                     node =>
@@ -348,8 +419,6 @@ function App() {
             setPlayback(states);
 
             /*
-             * IMPORTANT:
-             *
              * Start from MAIN.
              */
             setCurrentStep(0);
@@ -408,11 +477,10 @@ function App() {
 
     /*
      * =========================================================
-     * CLICK NODE
+     * CLICK CALL TREE NODE
      * =========================================================
      *
-     * Clicking a call tree node jumps directly to that
-     * call's playback state.
+     * Clicking a node jumps to that call's playback state.
      */
 
     function handleCallSelect(node) {
@@ -443,7 +511,7 @@ function App() {
 
     /*
      * =========================================================
-     * CURRENT STATE
+     * CURRENT PLAYBACK STATE
      * =========================================================
      */
 
@@ -455,11 +523,10 @@ function App() {
 
     /*
      * =========================================================
-     * CURRENT NODE
+     * SELECTED CALL
      * =========================================================
      *
-     * This ID is passed into CallTree so the current
-     * playback node receives the blue highlight.
+     * This controls the blue highlight in CallTree.
      */
 
     const selectedCallId =
@@ -469,7 +536,7 @@ function App() {
 
     /*
      * =========================================================
-     * DISPLAY PARAMETER TEXT
+     * FORMAT PARAMETERS
      * =========================================================
      */
 
@@ -494,7 +561,7 @@ function App() {
 
     /*
      * =========================================================
-     * DISPLAY RETURN VALUE
+     * FORMAT RETURN VALUE
      * =========================================================
      */
 
@@ -577,16 +644,30 @@ function App() {
                     </div>
 
 
-                    <textarea
-                        className="code-editor"
-                        value={sourceCode}
-                        onChange={
-                            event =>
-                                setSourceCode(
-                                    event.target.value
-                                )
+                    <CodeViewer
+                        sourceCode={sourceCode}
+
+                        /*
+                         * IMPORTANT:
+                         *
+                         * Previously this was:
+                         *
+                         * selectedEvent?.lineNumber
+                         *
+                         * but selectedEvent was never updated.
+                         *
+                         * Now the line comes directly from
+                         * the current playback state.
+                         */
+
+                        currentLine={
+                            currentState?.lineNumber ??
+                            null
                         }
-                        spellCheck={false}
+
+                        onChange={
+                            setSourceCode
+                        }
                     />
 
                 </section>
