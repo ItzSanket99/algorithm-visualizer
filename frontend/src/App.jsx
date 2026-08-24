@@ -1,322 +1,23 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import { executeCode } from "./services/executionApi";
+import CodeViewer from "./components/CodeViewer";
 import CallTree from "./components/CallTree";
 import ExecutionState from "./components/ExecutionState";
-import CodeViewer from "./components/CodeViewer";
+
+import { executeCode } from "./services/executionApi";
 
 
-/*
- * =========================================================
- * BUILD PLAYBACK
- * =========================================================
- *
- * We intentionally create ONE playback state per call.
- *
- * This keeps playback useful for students instead of
- * forcing them through every raw execution event.
- *
- * Example:
- *
- * main
- *   ↓
- * fib(4)
- *   ↓
- * fib(3)
- *   ↓
- * fib(2)
- *   ↓
- * fib(1)
- *   ↓
- * fib(0)
- *   ↓
- * ...
- */
+/* =========================================================
+   DEFAULT CODE
+   ========================================================= */
 
-function buildCallPlayback(root) {
-
-    if (!root) {
-        return [];
-    }
-
-    const result = [];
-
-
-    function visit(node) {
-
-        if (!node) {
-            return;
-        }
-
-        /*
-         * Preorder traversal:
-         *
-         * current node first
-         * then children from left to right
-         */
-        result.push(node);
-
-        const children =
-            node.children || [];
-
-        children.forEach(child => {
-            visit(child);
-        });
-    }
-
-
-    visit(root);
-
-    return result;
-}
-
-
-/*
- * =========================================================
- * FIND EXIT EVENT
- * =========================================================
- *
- * Used mainly for:
- *
- * - return value
- * - final state of the call
- */
-
-function findExitEvent(events, callId) {
-
-    if (!events || callId == null) {
-        return null;
-    }
-
-    return (
-        events.find(
-            event =>
-                event.callId === callId &&
-                event.eventType === "METHOD_EXIT"
-        ) || null
-    );
-}
-
-
-/*
- * =========================================================
- * FIND LINE EVENT
- * =========================================================
- *
- * A METHOD_EXIT event may not point to the most useful
- * source line.
- *
- * Therefore we find the LAST LINE_EXECUTED event belonging
- * to this call.
- *
- * This gives the source-code viewer a meaningful line
- * to highlight for the call-level playback state.
- */
-
-function findLastLineEvent(events, callId) {
-
-    if (!events || callId == null) {
-        return null;
-    }
-
-    const lineEvents =
-        events.filter(
-            event =>
-                event.callId === callId &&
-                event.eventType === "LINE_EXECUTED"
-        );
-
-    if (lineEvents.length === 0) {
-        return null;
-    }
-
-    return lineEvents[lineEvents.length - 1];
-}
-
-
-/*
- * =========================================================
- * FIND ENTER EVENT
- * =========================================================
- */
-
-function findEnterEvent(events, callId) {
-
-    if (!events || callId == null) {
-        return null;
-    }
-
-    return (
-        events.find(
-            event =>
-                event.callId === callId &&
-                event.eventType === "METHOD_ENTER"
-        ) || null
-    );
-}
-
-
-/*
- * =========================================================
- * MERGE CALL NODE + EVENTS
- * =========================================================
- *
- * The call tree provides:
- *
- * - methodName
- * - parameters
- * - returnValue
- * - callId
- *
- * Execution events provide:
- *
- * - lineNumber
- * - variables
- * - returnValue
- * - eventType
- * - callDepth
- *
- * We combine them into one clean playback state.
- */
-
-function createPlaybackState(node, events) {
-
-    const exitEvent =
-        findExitEvent(
-            events,
-            node.callId
-        );
-
-    const lineEvent =
-        findLastLineEvent(
-            events,
-            node.callId
-        );
-
-    const enterEvent =
-        findEnterEvent(
-            events,
-            node.callId
-        );
-
-
-    /*
-     * Prefer the line event for source highlighting.
-     *
-     * If there isn't one, fall back to the enter event
-     * and finally the call-tree node.
-     */
-    const displayEvent =
-        lineEvent ||
-        enterEvent ||
-        exitEvent;
-
-
-    return {
-
-        /*
-         * =================================================
-         * CALL INFORMATION
-         * =================================================
-         */
-
-        callId:
-            node.callId,
-
-        methodName:
-            node.methodName,
-
-        parameters:
-            node.parameters ||
-            enterEvent?.parameters ||
-            {},
-
-
-        /*
-         * =================================================
-         * RETURN VALUE
-         * =================================================
-         *
-         * Return value should come from METHOD_EXIT first.
-         */
-
-        returnValue:
-            exitEvent?.returnValue ??
-            node.returnValue ??
-            null,
-
-
-        /*
-         * =================================================
-         * SOURCE LINE
-         * =================================================
-         *
-         * IMPORTANT:
-         *
-         * This is what CodeViewer uses to highlight
-         * the current source-code row.
-         */
-
-        lineNumber:
-            displayEvent?.lineNumber ??
-            node.lineNumber ??
-            null,
-
-
-        /*
-         * =================================================
-         * EVENT INFORMATION
-         * =================================================
-         */
-
-        eventType:
-            displayEvent?.eventType ||
-            "METHOD_ENTER",
-
-        callDepth:
-            displayEvent?.callDepth ??
-            node.callDepth ??
-            0,
-
-
-        /*
-         * =================================================
-         * VARIABLES
-         * =================================================
-         *
-         * Prefer the last LINE_EXECUTED state because
-         * it usually represents the most useful local
-         * state for this call.
-         */
-
-        variables:
-            lineEvent?.variables ||
-            exitEvent?.variables ||
-            enterEvent?.variables ||
-            node.variables ||
-            {}
-    };
-}
-
-
-/*
- * =========================================================
- * APP
- * =========================================================
- */
-
-function App() {
-
-    const [sourceCode, setSourceCode] =
-        useState(
-            `public class Test {
+const DEFAULT_CODE = `public class Test {
 
     public static void main(String[] args) {
 
         System.out.println(
             fib(4)
         );
-
     }
 
     static int fib(int n) {
@@ -327,62 +28,1080 @@ function App() {
 
         return fib(n - 1) + fib(n - 2);
     }
+}`;
 
-}`
+
+/* =========================================================
+   ARRAY HELPERS
+   ========================================================= */
+
+/*
+ * Checks whether a runtime value is represented
+ * as an array.
+ *
+ * Examples:
+ *
+ * [10, 20, 30]
+ * [10, 99, 30, 40]
+ * []
+ */
+function isArrayValue(value) {
+
+    if (typeof value !== "string") {
+        return false;
+    }
+
+    const text = value.trim();
+
+    return (
+        text.startsWith("[") &&
+        text.endsWith("]")
+    );
+}
+
+
+/*
+ * Convert:
+ *
+ * "[10, 99, 30, 40]"
+ *
+ * into:
+ *
+ * ["10", "99", "30", "40"]
+ */
+function parseArrayValue(value) {
+
+    if (!isArrayValue(value)) {
+        return [];
+    }
+
+    const content =
+        value
+            .trim()
+            .slice(1, -1)
+            .trim();
+
+    if (!content) {
+        return [];
+    }
+
+    const result = [];
+
+    let current = "";
+    let depth = 0;
+
+    for (let i = 0; i < content.length; i++) {
+
+        const char = content[i];
+
+        if (char === "[") {
+            depth++;
+            current += char;
+            continue;
+        }
+
+        if (char === "]") {
+            depth--;
+            current += char;
+            continue;
+        }
+
+        if (
+            char === "," &&
+            depth === 0
+        ) {
+
+            result.push(
+                current.trim()
+            );
+
+            current = "";
+
+            continue;
+        }
+
+        current += char;
+    }
+
+    if (current.trim()) {
+
+        result.push(
+            current.trim()
+        );
+    }
+
+    return result;
+}
+
+
+/*
+ * Get all real algorithm arrays from an event.
+ *
+ * IMPORTANT:
+ *
+ * We deliberately exclude:
+ *
+ * args
+ *
+ * and every method parameter.
+ */
+function getArrayVariables(event) {
+
+    if (!event) {
+        return {};
+    }
+
+    const variables =
+        event.variables || {};
+
+    const parameters =
+        event.parameters || {};
+
+    const arrays = {};
+
+
+    /*
+     * =====================================================
+     * 1. LOCAL VARIABLES
+     * =====================================================
+     *
+     * If a normal local variable contains an array,
+     * include it.
+     *
+     * Example:
+     *
+     * int[] arr = {10, 20, 30};
+     */
+
+    Object.entries(
+        variables
+    ).forEach(
+        ([name, value]) => {
+
+            /*
+             * String[] args is never an
+             * algorithm array.
+             */
+
+            if (name === "args") {
+                return;
+            }
+
+
+            /*
+             * Include actual array values.
+             */
+
+            if (
+                isArrayValue(value)
+            ) {
+
+                arrays[name] = value;
+            }
+
+        }
+    );
+
+
+    /*
+     * =====================================================
+     * 2. ARRAY PARAMETERS
+     * =====================================================
+     *
+     * IMPORTANT:
+     *
+     * An algorithm array can be passed
+     * into another method.
+     *
+     * Example:
+     *
+     * selectionSort(int[] arr)
+     *
+     * Here arr is technically a parameter,
+     * but it is still the SAME algorithm array.
+     *
+     * Therefore we MUST include array parameters.
+     */
+
+    Object.entries(
+        parameters
+    ).forEach(
+        ([name, value]) => {
+
+            /*
+             * Only ignore Java's main args.
+             */
+
+            if (name === "args") {
+                return;
+            }
+
+
+            /*
+             * Include parameter only if
+             * it is actually an array.
+             */
+
+            if (
+                isArrayValue(value)
+            ) {
+
+                /*
+                 * Prefer the value already
+                 * captured from local variables.
+                 *
+                 * Otherwise use the parameter.
+                 */
+
+                if (
+                    !Object.prototype
+                        .hasOwnProperty
+                        .call(
+                            arrays,
+                            name
+                        )
+                ) {
+
+                    arrays[name] =
+                        value;
+                }
+
+            }
+
+        }
+    );
+
+
+    return arrays;
+}
+
+/* =========================================================
+   ARRAY STATE EXTRACTION
+   ========================================================= */
+function buildArrayStates(events) {
+
+    const states = [];
+
+    let previousArrays = {};
+
+
+    for (const event of events) {
+
+        /*
+         * Only actual source-line execution
+         * events can become array states.
+         */
+
+        if (
+            event.eventType !==
+            "LINE_EXECUTED"
+        ) {
+            continue;
+        }
+
+
+        /*
+         * Find every array available
+         * at this execution point.
+         *
+         * This includes:
+         *
+         * - local arrays
+         * - array parameters
+         */
+
+        const arrays =
+            getArrayVariables(
+                event
+            );
+
+
+        /*
+         * No array at this point.
+         */
+
+        if (
+            Object.keys(arrays).length === 0
+        ) {
+            continue;
+        }
+
+
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT compare snapshots here.
+         *
+         * Every LINE_EXECUTED event containing
+         * an array is an execution state.
+         *
+         * Even if:
+         *
+         * [64,25,12,22,11]
+         *
+         * has not changed yet, variables such as
+         *
+         * i
+         * j
+         * minIndex
+         *
+         * may have changed.
+         *
+         * Therefore it is still a meaningful
+         * execution step.
+         */
+
+        states.push({
+
+            event,
+
+            arrays,
+
+            previousArrays
+
+        });
+
+
+        /*
+         * Save current state for
+         * visual change highlighting.
+         */
+
+        previousArrays = {
+            ...arrays
+        };
+    }
+
+
+    return states;
+}
+
+/* =========================================================
+   PARAMETER FORMATTER
+   ========================================================= */
+
+function formatParameters(parameters) {
+
+    if (
+        !parameters ||
+        Object.keys(parameters).length === 0
+    ) {
+        return "";
+    }
+
+    return Object.entries(
+        parameters
+    )
+        .map(
+            ([name, value]) =>
+                `${name}=${value}`
+        )
+        .join(", ");
+}
+
+
+/* =========================================================
+   ARRAY PANEL
+   ========================================================= */
+
+function ArrayPanel({
+    state
+}) {
+
+    if (!state) {
+
+        return (
+
+            <div className="
+                flex
+                h-full
+                items-center
+                justify-center
+                text-center
+            ">
+
+                <div>
+
+                    <p className="
+                        text-sm
+                        font-semibold
+                        text-slate-300
+                    ">
+                        No execution state
+                    </p>
+
+                    <p className="
+                        mt-2
+                        text-xs
+                        text-slate-500
+                    ">
+                        Run your code to see
+                        the array visualization.
+                    </p>
+
+                </div>
+
+            </div>
+        );
+    }
+
+
+    const arrays =
+        state.arrays || {};
+
+
+    return (
+
+        <div className="
+            h-full
+            overflow-auto
+            p-4
+        ">
+
+            <div className="
+                space-y-5
+            ">
+
+                {Object.entries(
+                    arrays
+                ).map(
+                    ([name, value]) => {
+
+                        const values =
+                            parseArrayValue(
+                                value
+                            );
+
+
+                        const previousValue =
+                            state
+                                .previousArrays
+                                ?.[
+                                    name
+                                ];
+
+
+                        const previousValues =
+                            parseArrayValue(
+                                previousValue
+                            );
+
+
+                        return (
+
+                            <div
+                                key={name}
+                                className="
+                                    overflow-hidden
+                                    rounded-lg
+                                    border
+                                    border-[#30363d]
+                                    bg-[#161b22]
+                                "
+                            >
+
+                                {/* ARRAY HEADER */}
+
+                                <div className="
+                                    flex
+                                    items-center
+                                    justify-between
+                                    border-b
+                                    border-[#30363d]
+                                    px-4
+                                    py-3
+                                ">
+
+                                    <div className="
+                                        flex
+                                        items-center
+                                        gap-2
+                                    ">
+
+                                        <span className="
+                                            text-sm
+                                            font-semibold
+                                            text-slate-200
+                                        ">
+                                            {name}
+                                        </span>
+
+                                        <span className="
+                                            rounded
+                                            border
+                                            border-[#30363d]
+                                            px-1.5
+                                            py-0.5
+                                            text-[9px]
+                                            font-semibold
+                                            text-[#6685ff]
+                                        ">
+                                            ARRAY
+                                        </span>
+
+                                    </div>
+
+
+                                    <span className="
+                                        text-[10px]
+                                        text-slate-500
+                                    ">
+                                        length = {
+                                            values.length
+                                        }
+                                    </span>
+
+                                </div>
+
+
+                                {/* ARRAY */}
+
+                                {values.length === 0 ? (
+
+                                    <div className="
+                                        flex
+                                        h-24
+                                        items-center
+                                        justify-center
+                                        text-xs
+                                        text-slate-500
+                                    ">
+                                        Empty array
+                                    </div>
+
+                                ) : (
+
+                                    <div className="
+                                        overflow-x-auto
+                                        p-4
+                                    ">
+
+                                        <div className="
+                                            inline-flex
+                                            min-w-full
+                                            flex-col
+                                        ">
+
+                                            {/* INDEX ROW */}
+
+                                            <div className="
+                                                flex
+                                                min-w-max
+                                            ">
+
+                                                {values.map(
+                                                    (_, index) => (
+
+                                                        <div
+                                                            key={
+                                                                `index-${index}`
+                                                            }
+                                                            className="
+                                                                flex
+                                                                w-20
+                                                                justify-center
+                                                                text-[10px]
+                                                                text-slate-500
+                                                            "
+                                                        >
+                                                            [{index}]
+                                                        </div>
+
+                                                    )
+                                                )}
+
+                                            </div>
+
+
+                                            {/* VALUE ROW */}
+
+                                            <div className="
+                                                flex
+                                                min-w-max
+                                            ">
+
+                                                {values.map(
+                                                    (
+                                                        currentValue,
+                                                        index
+                                                    ) => {
+
+                                                        const oldValue =
+                                                            previousValues[
+                                                                index
+                                                            ];
+
+
+                                                        const changed =
+                                                            oldValue !==
+                                                                undefined &&
+                                                            oldValue !==
+                                                                currentValue;
+
+
+                                                        return (
+
+                                                            <div
+                                                                key={
+                                                                    `value-${index}`
+                                                                }
+                                                                className={`
+                                                                    flex
+                                                                    h-16
+                                                                    w-20
+                                                                    items-center
+                                                                    justify-center
+                                                                    border
+                                                                    border-[#30363d]
+                                                                    bg-[#0d1117]
+                                                                    font-mono
+                                                                    text-sm
+                                                                    font-semibold
+                                                                    ${
+                                                                        changed
+                                                                            ? `
+                                                                                border-[#526ff5]
+                                                                                bg-[#526ff5]/10
+                                                                                text-[#6685ff]
+                                                                              `
+                                                                            : `
+                                                                                text-slate-200
+                                                                              `
+                                                                    }
+                                                                `}
+                                                            >
+
+                                                                {
+                                                                    currentValue
+                                                                }
+
+                                                            </div>
+
+                                                        );
+                                                    }
+                                                )}
+
+                                            </div>
+
+
+                                            {/* CHANGE INFORMATION */}
+
+                                            <div className="
+                                                flex
+                                                min-w-max
+                                            ">
+
+                                                {values.map(
+                                                    (
+                                                        currentValue,
+                                                        index
+                                                    ) => {
+
+                                                        const oldValue =
+                                                            previousValues[
+                                                                index
+                                                            ];
+
+
+                                                        const changed =
+                                                            oldValue !==
+                                                                undefined &&
+                                                            oldValue !==
+                                                                currentValue;
+
+
+                                                        return (
+
+                                                            <div
+                                                                key={
+                                                                    `change-${index}`
+                                                                }
+                                                                className="
+                                                                    flex
+                                                                    h-8
+                                                                    w-20
+                                                                    items-center
+                                                                    justify-center
+                                                                    text-[9px]
+                                                                "
+                                                            >
+
+                                                                {changed ? (
+
+                                                                    <span className="
+                                                                        text-[#6685ff]
+                                                                    ">
+                                                                        {
+                                                                            oldValue
+                                                                        }
+                                                                        {" → "}
+                                                                        {
+                                                                            currentValue
+                                                                        }
+                                                                    </span>
+
+                                                                ) : (
+
+                                                                    <span className="
+                                                                        text-slate-700
+                                                                    ">
+                                                                        —
+                                                                    </span>
+
+                                                                )}
+
+                                                            </div>
+
+                                                        );
+                                                    }
+                                                )}
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                )}
+
+                            </div>
+
+                        );
+                    }
+                )}
+
+            </div>
+
+        </div>
+    );
+}
+
+
+/* =========================================================
+   APP
+   ========================================================= */
+
+export default function App() {
+
+    /*
+     * -------------------------------------------------------
+     * SOURCE
+     * -------------------------------------------------------
+     */
+
+    const [sourceCode, setSourceCode] =
+        useState(
+            DEFAULT_CODE
         );
 
+
+    /*
+     * -------------------------------------------------------
+     * EXECUTION
+     * -------------------------------------------------------
+     */
 
     const [execution, setExecution] =
         useState(null);
 
 
-    const [playback, setPlayback] =
-        useState([]);
+    /*
+     * -------------------------------------------------------
+     * VISUALIZATION SELECTION
+     *
+     * This is now a dropdown.
+     * -------------------------------------------------------
+     */
+
+    const [visualizationMode, setVisualizationMode] =
+        useState("auto");
 
 
-    const [currentStep, setCurrentStep] =
+    /*
+     * -------------------------------------------------------
+     * RECURSION PLAYBACK
+     * -------------------------------------------------------
+     */
+
+    const [currentCallIndex, setCurrentCallIndex] =
         useState(0);
 
 
-    const [loading, setLoading] =
+    /*
+     * -------------------------------------------------------
+     * ARRAY PLAYBACK
+     * -------------------------------------------------------
+     */
+
+    const [currentArrayIndex, setCurrentArrayIndex] =
+        useState(0);
+
+
+    /*
+     * -------------------------------------------------------
+     * RUN STATE
+     * -------------------------------------------------------
+     */
+
+    const [isRunning, setIsRunning] =
         useState(false);
 
+
+    /*
+     * -------------------------------------------------------
+     * ERROR
+     * -------------------------------------------------------
+     */
 
     const [error, setError] =
         useState(null);
 
 
     /*
-     * =========================================================
-     * RUN CODE
-     * =========================================================
+     * =======================================================
+     * EXECUTION EVENTS
+     * =======================================================
      */
 
-    async function handleRun() {
+    const events =
+        execution?.events || [];
 
-        setLoading(true);
+
+    /*
+     * =======================================================
+     * RECURSION CALLS
+     * =======================================================
+     */
+
+    const callEvents =
+        useMemo(
+            () =>
+                events.filter(
+                    event =>
+                        event.eventType ===
+                        "METHOD_ENTER"
+                ),
+            [events]
+        );
+
+
+    /*
+     * =======================================================
+     * ARRAY STATES
+     * =======================================================
+     */
+
+    const arrayStates =
+        useMemo(
+            () =>
+                buildArrayStates(
+                    events
+                ),
+            [events]
+        );
+
+
+    /*
+     * =======================================================
+     * AUTO DETECTION
+     * =======================================================
+     *
+     * If an actual algorithm array exists,
+     * Auto uses Array.
+     *
+     * Otherwise it uses Recursion.
+     *
+     * args is already excluded.
+     * =======================================================
+     */
+
+    const effectiveMode =
+        visualizationMode === "auto"
+            ? (
+                arrayStates.length > 0
+                    ? "array"
+                    : "recursion"
+            )
+            : visualizationMode;
+
+
+    /*
+     * =======================================================
+     * CURRENT RECURSION CALL
+     * =======================================================
+     */
+
+    const currentCall =
+        callEvents[
+            currentCallIndex
+        ] || null;
+
+
+    /*
+     * =======================================================
+     * GET LINE EVENT FOR CALL
+     * =======================================================
+     */
+
+    function getLineEventForCall(call) {
+
+        if (!call) {
+            return null;
+        }
+
+
+        const lineEvents =
+            events.filter(
+                event =>
+                    event.eventType ===
+                        "LINE_EXECUTED" &&
+                    String(
+                        event.callId
+                    ) ===
+                        String(
+                            call.callId
+                        )
+            );
+
+
+        if (
+            lineEvents.length > 0
+        ) {
+
+            return (
+                lineEvents[
+                    lineEvents.length - 1
+                ]
+            );
+        }
+
+
+        return call;
+    }
+
+
+    /*
+     * =======================================================
+     * CURRENT RECURSION EVENT
+     * =======================================================
+     */
+
+    const currentRecursionEvent =
+        getLineEventForCall(
+            currentCall
+        );
+
+
+    /*
+     * =======================================================
+     * PREVIOUS RECURSION EVENT
+     * =======================================================
+     */
+
+    const previousCall =
+        callEvents[
+            currentCallIndex - 1
+        ] || null;
+
+
+    const previousRecursionEvent =
+        getLineEventForCall(
+            previousCall
+        );
+
+
+    /*
+     * =======================================================
+     * CURRENT ARRAY STATE
+     * =======================================================
+     */
+
+    const currentArrayState =
+        arrayStates[
+            currentArrayIndex
+        ] || null;
+
+
+    /*
+     * =======================================================
+     * PREVIOUS ARRAY STATE
+     * =======================================================
+     */
+
+    const previousArrayState =
+        arrayStates[
+            currentArrayIndex - 1
+        ] || null;
+
+
+    /*
+     * =======================================================
+     * ACTIVE EVENT
+     * =======================================================
+     */
+
+    const activeEvent =
+        effectiveMode === "array"
+            ? currentArrayState?.event
+            : currentRecursionEvent;
+
+
+    /*
+     * =======================================================
+     * PREVIOUS ACTIVE EVENT
+     * =======================================================
+     */
+
+    const previousActiveEvent =
+        effectiveMode === "array"
+            ? previousArrayState?.event
+            : previousRecursionEvent;
+
+
+    /*
+     * =======================================================
+     * ACTIVE LINE
+     * =======================================================
+     */
+
+    const activeLine =
+        activeEvent?.lineNumber ??
+        null;
+
+
+    /*
+     * =======================================================
+     * RUN CODE
+     * =======================================================
+     */
+
+    async function handleRunCode() {
+
+        setIsRunning(true);
 
         setError(null);
 
         setExecution(null);
 
-        setPlayback([]);
+        setCurrentCallIndex(0);
 
-        setCurrentStep(0);
+        setCurrentArrayIndex(0);
 
 
         try {
 
-            const result =
+            const response =
                 await executeCode(
                     sourceCode
                 );
 
 
-            if (!result.success) {
+            if (
+                !response?.success
+            ) {
 
                 setError(
-                    result.error ||
+                    response?.error ||
                     "Execution failed."
                 );
 
@@ -390,40 +1109,16 @@ function App() {
             }
 
 
-            const trace =
-                result.execution;
+            setExecution(
+                response.execution
+            );
 
-
-            setExecution(trace);
-
-
-            /*
-             * Build one playback state per call.
-             */
-            const calls =
-                buildCallPlayback(
-                    trace.callTree
-                );
-
-
-            const states =
-                calls.map(
-                    node =>
-                        createPlaybackState(
-                            node,
-                            trace.events || []
-                        )
-                );
-
-
-            setPlayback(states);
-
-            /*
-             * Start from MAIN.
-             */
-            setCurrentStep(0);
 
         } catch (err) {
+
+            console.error(
+                err
+            );
 
             setError(
                 err?.response?.data?.error ||
@@ -433,190 +1128,241 @@ function App() {
 
         } finally {
 
-            setLoading(false);
-
+            setIsRunning(false);
         }
     }
 
 
     /*
-     * =========================================================
-     * PREVIOUS
-     * =========================================================
+     * =======================================================
+     * RECURSION PREVIOUS
+     * =======================================================
      */
 
-    function handlePrevious() {
+    function handlePreviousCall() {
 
-        setCurrentStep(
-            previous =>
+        setCurrentCallIndex(
+            index =>
                 Math.max(
                     0,
-                    previous - 1
+                    index - 1
                 )
         );
     }
 
 
     /*
-     * =========================================================
-     * NEXT
-     * =========================================================
+     * =======================================================
+     * RECURSION NEXT
+     * =======================================================
      */
 
-    function handleNext() {
+    function handleNextCall() {
 
-        setCurrentStep(
-            previous =>
+        setCurrentCallIndex(
+            index =>
                 Math.min(
-                    playback.length - 1,
-                    previous + 1
+                    callEvents.length - 1,
+                    index + 1
                 )
         );
     }
 
 
     /*
-     * =========================================================
-     * CLICK CALL TREE NODE
-     * =========================================================
-     *
-     * Clicking a node jumps to that call's playback state.
+     * =======================================================
+     * ARRAY PREVIOUS
+     * =======================================================
+     */
+
+    function handlePreviousArray() {
+
+        setCurrentArrayIndex(
+            index =>
+                Math.max(
+                    0,
+                    index - 1
+                )
+        );
+    }
+
+
+    /*
+     * =======================================================
+     * ARRAY NEXT
+     * =======================================================
+     */
+
+    function handleNextArray() {
+
+        setCurrentArrayIndex(
+            index =>
+                Math.min(
+                    arrayStates.length - 1,
+                    index + 1
+                )
+        );
+    }
+
+
+    /*
+     * =======================================================
+     * CALL TREE SELECTION
+     * =======================================================
      */
 
     function handleCallSelect(node) {
 
-        if (
-            !node ||
-            playback.length === 0
-        ) {
+        if (!node) {
             return;
         }
 
 
+        const callId =
+            node.callId;
+
+
         const index =
-            playback.findIndex(
-                state =>
-                    state.callId ===
-                    node.callId
+            callEvents.findIndex(
+                event =>
+                    String(
+                        event.callId
+                    ) ===
+                    String(
+                        callId
+                    )
             );
 
 
         if (index !== -1) {
 
-            setCurrentStep(index);
-
+            setCurrentCallIndex(
+                index
+            );
         }
     }
 
 
     /*
-     * =========================================================
-     * CURRENT PLAYBACK STATE
-     * =========================================================
+     * =======================================================
+     * MODE CHANGE
+     * =======================================================
      */
 
-    const currentState =
-        playback.length > 0
-            ? playback[currentStep]
-            : null;
+    function handleVisualizationChange(
+        event
+    ) {
+
+        const value =
+            event.target.value;
 
 
-    /*
-     * =========================================================
-     * SELECTED CALL
-     * =========================================================
-     *
-     * This controls the blue highlight in CallTree.
-     */
-
-    const selectedCallId =
-        currentState?.callId ??
-        null;
+        setVisualizationMode(
+            value
+        );
 
 
-    /*
-     * =========================================================
-     * FORMAT PARAMETERS
-     * =========================================================
-     */
-
-    function formatParameters(parameters) {
+        /*
+         * Reset playback
+         * when switching view.
+         */
 
         if (
-            !parameters ||
-            Object.keys(parameters).length === 0
+            value === "array"
         ) {
-            return "";
+
+            setCurrentArrayIndex(0);
         }
 
-
-        return Object.entries(parameters)
-            .map(
-                ([key, value]) =>
-                    `${key}=${value}`
-            )
-            .join(", ");
-    }
-
-
-    /*
-     * =========================================================
-     * FORMAT RETURN VALUE
-     * =========================================================
-     */
-
-    function formatReturnValue(value) {
 
         if (
-            value === null ||
-            value === undefined
+            value === "recursion"
         ) {
-            return "—";
+
+            setCurrentCallIndex(0);
         }
 
-
-        return String(value);
     }
 
 
     /*
-     * =========================================================
+     * =======================================================
      * RENDER
-     * =========================================================
+     * =======================================================
      */
 
     return (
 
-        <div className="app">
+        <div className="
+            min-h-screen
+            bg-[#0d1117]
+            px-5
+            py-6
+            text-[#e6edf3]
+        ">
+
 
             {/* =================================================
                 HEADER
             ================================================= */}
 
-            <header className="app-header">
+            <header className="
+                mb-5
+                flex
+                items-center
+                justify-between
+            ">
 
                 <div>
 
-                    <h1 className="app-title">
+                    <h1 className="
+                        text-2xl
+                        font-bold
+                    ">
                         AlgoTrace
                     </h1>
 
-                    <p className="app-subtitle">
-                        Visualize your code execution
+                    <p className="
+                        mt-1
+                        text-xs
+                        text-slate-500
+                    ">
+                        Visualize code execution
                     </p>
 
                 </div>
 
 
                 <button
-                    className="run-button"
-                    onClick={handleRun}
-                    disabled={loading}
+                    type="button"
+                    onClick={
+                        handleRunCode
+                    }
+                    disabled={
+                        isRunning
+                    }
+                    className="
+                        rounded-lg
+                        bg-[#526ff5]
+                        px-5
+                        py-2.5
+                        text-sm
+                        font-semibold
+                        text-white
+                        shadow-lg
+                        shadow-[#526ff5]/20
+                        transition
+                        hover:bg-[#607cff]
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                    "
                 >
 
-                    {loading
-                        ? "Running..."
-                        : "Run Code"}
+                    {
+                        isRunning
+                            ? "Running..."
+                            : "Run Code"
+                    }
 
                 </button>
 
@@ -624,106 +1370,146 @@ function App() {
 
 
             {/* =================================================
-                WORKSPACE
+                VISUALIZATION SELECTOR
             ================================================= */}
 
-            <main className="workspace">
+            <div className="
+                mb-4
+                flex
+                items-center
+                gap-3
+            ">
 
-                {/* =================================================
-                    SOURCE CODE
-                ================================================= */}
-
-                <section className="panel code-panel">
-
-                    <div className="panel-header">
-
-                        <h2>
-                            Source Code
-                        </h2>
-
-                    </div>
+                <label className="
+                    text-xs
+                    font-semibold
+                    text-slate-400
+                ">
+                    Visualization
+                </label>
 
 
-                    <CodeViewer
-                        sourceCode={sourceCode}
+                <div className="
+                    relative
+                ">
 
-                        /*
-                         * IMPORTANT:
-                         *
-                         * Previously this was:
-                         *
-                         * selectedEvent?.lineNumber
-                         *
-                         * but selectedEvent was never updated.
-                         *
-                         * Now the line comes directly from
-                         * the current playback state.
-                         */
-
-                        currentLine={
-                            currentState?.lineNumber ??
-                            null
+                    <select
+                        value={
+                            visualizationMode
                         }
-
                         onChange={
-                            setSourceCode
+                            handleVisualizationChange
                         }
-                    />
+                        className="
+                            min-w-[190px]
+                            appearance-none
+                            rounded-lg
+                            border
+                            border-[#30363d]
+                            bg-[#161b22]
+                            px-4
+                            py-2.5
+                            pr-10
+                            text-xs
+                            font-semibold
+                            text-slate-200
+                            outline-none
+                            transition
+                            focus:border-[#526ff5]
+                            focus:ring-1
+                            focus:ring-[#526ff5]
+                        "
+                    >
 
-                </section>
+                        <option value="auto">
+                            Auto
+                        </option>
+
+                        <option value="array">
+                            Array
+                        </option>
+
+                        <option value="recursion">
+                            Recursion
+                        </option>
+
+                        <option
+                            value="stack"
+                            disabled
+                        >
+                            Stack — Coming Soon
+                        </option>
+
+                        <option
+                            value="queue"
+                            disabled
+                        >
+                            Queue — Coming Soon
+                        </option>
+
+                        <option
+                            value="linked-list"
+                            disabled
+                        >
+                            Linked List — Coming Soon
+                        </option>
+
+                        <option
+                            value="tree"
+                            disabled
+                        >
+                            Tree — Coming Soon
+                        </option>
+
+                        <option
+                            value="graph"
+                            disabled
+                        >
+                            Graph — Coming Soon
+                        </option>
+
+                    </select>
 
 
-                {/* =================================================
-                    CALL TREE
-                ================================================= */}
-
-                <section className="panel tree-panel">
-
-                    <div className="panel-header">
-
-                        <h2>
-                            Call Tree
-                        </h2>
-
+                    <div className="
+                        pointer-events-none
+                        absolute
+                        right-3
+                        top-1/2
+                        -translate-y-1/2
+                        text-slate-500
+                    ">
+                        ▼
                     </div>
 
+                </div>
 
-                    <div className="tree-container">
 
-                        {execution ? (
+                {execution && (
 
-                            <CallTree
-                                root={
-                                    execution.callTree
-                                }
+                    <span className="
+                        rounded-md
+                        border
+                        border-[#30363d]
+                        bg-[#161b22]
+                        px-3
+                        py-2
+                        text-[10px]
+                        font-medium
+                        text-slate-500
+                    ">
 
-                                onSelect={
-                                    handleCallSelect
-                                }
+                        {
+                            effectiveMode === "array"
+                                ? "Array Visualization"
+                                : "Recursion Tree"
+                        }
 
-                                selectedCallId={
-                                    selectedCallId
-                                }
-                            />
+                    </span>
 
-                        ) : (
+                )}
 
-                            <div className="empty-state">
-
-                                <p>
-                                    Run your code to see
-                                    the execution tree.
-                                </p>
-
-                            </div>
-
-                        )}
-
-                    </div>
-
-                </section>
-
-            </main>
+            </div>
 
 
             {/* =================================================
@@ -732,7 +1518,18 @@ function App() {
 
             {error && (
 
-                <div className="error-message">
+                <div className="
+                    mb-4
+                    rounded-lg
+                    border
+                    border-red-500/30
+                    bg-red-500/10
+                    px-4
+                    py-3
+                    text-xs
+                    leading-5
+                    text-red-300
+                ">
                     {error}
                 </div>
 
@@ -740,87 +1537,532 @@ function App() {
 
 
             {/* =================================================
-                PLAYBACK
+                MAIN TWO-PANEL AREA
             ================================================= */}
 
-            {playback.length > 0 && (
-
-                <div className="playback-panel">
-
-                    {/* PREVIOUS */}
-
-                    <button
-                        className="playback-button"
-                        onClick={
-                            handlePrevious
-                        }
-                        disabled={
-                            currentStep === 0
-                        }
-                    >
-
-                        ← Previous
-
-                    </button>
+            <div className="
+                grid
+                grid-cols-1
+                gap-3
+                xl:grid-cols-2
+            ">
 
 
-                    {/* CURRENT CALL */}
+                {/* =================================================
+                    SOURCE CODE
+                ================================================= */}
 
-                    <div className="playback-info">
+                <section className="
+                    overflow-hidden
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#0d1117]
+                ">
 
-                        <div className="playback-step">
+                    <div className="
+                        border-b
+                        border-[#30363d]
+                        bg-[#161b22]
+                        px-3
+                        py-2.5
+                        text-xs
+                        font-semibold
+                    ">
+                        Source Code
+                    </div>
 
-                            Call{" "}
-                            {currentStep + 1}
-                            {" "}
-                            of{" "}
-                            {playback.length}
+
+                    <div className="
+                        h-[490px]
+                        overflow-auto
+                    ">
+
+                        <CodeViewer
+                            code={
+                                sourceCode
+                            }
+
+                            setCode={
+                                setSourceCode
+                            }
+
+                            activeLine={
+                                activeLine
+                            }
+                        />
+
+                    </div>
+
+                </section>
+
+
+                {/* =================================================
+                    VISUALIZATION
+                ================================================= */}
+
+                <section className="
+                    overflow-hidden
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#0d1117]
+                ">
+
+                    {/* HEADER */}
+
+                    <div className="
+                        flex
+                        items-center
+                        justify-between
+                        border-b
+                        border-[#30363d]
+                        bg-[#161b22]
+                        px-3
+                        py-2.5
+                    ">
+
+                        <div>
+
+                            <h2 className="
+                                text-xs
+                                font-semibold
+                            ">
+
+                                {
+                                    effectiveMode === "array"
+                                        ? "Array Visualization"
+                                        : "Recursion Tree"
+                                }
+
+                            </h2>
+
+
+                            <p className="
+                                mt-0.5
+                                text-[10px]
+                                text-slate-500
+                            ">
+
+                                {
+                                    effectiveMode === "array"
+                                        ? "Current array state during execution."
+                                        : "Recursive calls during execution."
+                                }
+
+                            </p>
 
                         </div>
 
 
-                        {currentState && (
+                        <span className="
+                            rounded
+                            border
+                            border-[#30363d]
+                            px-2
+                            py-1
+                            text-[9px]
+                            font-semibold
+                            text-slate-500
+                        ">
 
-                            <div className="playback-method">
+                            {
+                                effectiveMode === "array"
+                                    ? "ARRAY"
+                                    : "RECURSION"
+                            }
 
-                                {currentState.methodName}
+                        </span>
+
+                    </div>
+
+
+                    {/* =================================================
+                        ARRAY
+                    ================================================= */}
+
+                    {effectiveMode === "array" && (
+
+                        <div className="
+                            h-[450px]
+                        ">
+
+                            {execution ? (
+
+                                arrayStates.length > 0 ? (
+
+                                    <ArrayPanel
+                                        state={
+                                            currentArrayState
+                                        }
+                                    />
+
+                                ) : (
+
+                                    <div className="
+                                        flex
+                                        h-full
+                                        items-center
+                                        justify-center
+                                        text-center
+                                    ">
+
+                                        <div>
+
+                                            <p className="
+                                                text-sm
+                                                font-semibold
+                                                text-slate-300
+                                            ">
+                                                No array detected
+                                            </p>
+
+                                            <p className="
+                                                mt-2
+                                                text-xs
+                                                text-slate-500
+                                            ">
+                                                This execution does
+                                                not contain an
+                                                algorithm array.
+                                            </p>
+
+                                        </div>
+
+                                    </div>
+
+                                )
+
+                            ) : (
+
+                                <div className="
+                                    flex
+                                    h-full
+                                    items-center
+                                    justify-center
+                                    text-xs
+                                    text-slate-500
+                                ">
+                                    Run your code to see
+                                    the array visualization.
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    )}
+
+
+                    {/* =================================================
+                        RECURSION
+                    ================================================= */}
+
+                    {effectiveMode === "recursion" && (
+
+                        <div className="
+                            h-[450px]
+                            overflow-auto
+                        ">
+
+                            {execution ? (
+
+                                execution.callTree ? (
+
+                                    <CallTree
+                                        root={
+                                            execution.callTree
+                                        }
+
+                                        onSelect={
+                                            handleCallSelect
+                                        }
+
+                                        activeCallId={
+                                            currentCall
+                                                ?.callId
+                                        }
+                                    />
+
+                                ) : (
+
+                                    <div className="
+                                        flex
+                                        h-full
+                                        items-center
+                                        justify-center
+                                        text-xs
+                                        text-slate-500
+                                    ">
+                                        No execution tree available.
+                                    </div>
+
+                                )
+
+                            ) : (
+
+                                <div className="
+                                    flex
+                                    h-full
+                                    items-center
+                                    justify-center
+                                    text-xs
+                                    text-slate-500
+                                ">
+                                    Run your code to see
+                                    the recursion tree.
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    )}
+
+                </section>
+
+            </div>
+
+
+            {/* =================================================
+                ARRAY PLAYBACK
+            ================================================= */}
+
+            {effectiveMode === "array" &&
+                arrayStates.length > 0 && (
+
+                <div className="
+                    mt-3
+                    flex
+                    items-center
+                    justify-between
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#161b22]
+                    px-4
+                    py-3
+                ">
+
+                    <button
+                        type="button"
+                        onClick={
+                            handlePreviousArray
+                        }
+                        disabled={
+                            currentArrayIndex === 0
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        ← Previous State
+                    </button>
+
+
+                    <div className="
+                        text-center
+                    ">
+
+                        <p className="
+                            text-xs
+                            font-semibold
+                        ">
+                            Data State{" "}
+                            {currentArrayIndex + 1}
+                            {" "}
+                            of{" "}
+                            {arrayStates.length}
+                        </p>
+
+
+                        <p className="
+                            mt-1
+                            font-mono
+                            text-[10px]
+                            text-[#6685ff]
+                        ">
+                            Line{" "}
+                            {
+                                currentArrayState
+                                    ?.event
+                                    ?.lineNumber ??
+                                "—"
+                            }
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        onClick={
+                            handleNextArray
+                        }
+                        disabled={
+                            currentArrayIndex >=
+                            arrayStates.length - 1
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        Next State →
+                    </button>
+
+                </div>
+
+            )}
+
+
+            {/* =================================================
+                RECURSION PLAYBACK
+            ================================================= */}
+
+            {effectiveMode === "recursion" &&
+                callEvents.length > 0 && (
+
+                <div className="
+                    mt-3
+                    flex
+                    items-center
+                    justify-between
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#161b22]
+                    px-4
+                    py-3
+                ">
+
+                    <button
+                        type="button"
+                        onClick={
+                            handlePreviousCall
+                        }
+                        disabled={
+                            currentCallIndex === 0
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        ← Previous
+                    </button>
+
+
+                    <div className="
+                        min-w-0
+                        flex-1
+                        px-5
+                        text-center
+                    ">
+
+                        <p className="
+                            text-xs
+                            font-semibold
+                        ">
+
+                            Call{" "}
+                            {currentCallIndex + 1}
+                            {" "}
+                            of{" "}
+                            {callEvents.length}
+
+                        </p>
+
+
+                        {currentCall && (
+
+                            <p className="
+                                mt-1
+                                truncate
+                                font-mono
+                                text-[10px]
+                                text-[#6685ff]
+                            ">
+
+                                {
+                                    currentCall
+                                        .methodName
+                                }
 
                                 {"("}
 
-                                {formatParameters(
-                                    currentState.parameters
-                                )}
+                                {
+                                    formatParameters(
+                                        currentCall
+                                            .parameters
+                                    )
+                                }
 
                                 {")"}
 
-                                {" → "}
-
-                                {formatReturnValue(
-                                    currentState.returnValue
-                                )}
-
-                            </div>
+                            </p>
 
                         )}
 
                     </div>
 
 
-                    {/* NEXT */}
-
                     <button
-                        className="playback-button"
+                        type="button"
                         onClick={
-                            handleNext
+                            handleNextCall
                         }
                         disabled={
-                            currentStep >=
-                            playback.length - 1
+                            currentCallIndex >=
+                            callEvents.length - 1
                         }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
                     >
-
                         Next →
-
                     </button>
 
                 </div>
@@ -834,30 +2076,24 @@ function App() {
 
             {execution && (
 
-                <section className="panel state-panel">
-
-                    <div className="panel-header">
-
-                        <h2>
-                            Execution State
-                        </h2>
-
-                    </div>
-
+                <div className="
+                    mt-3
+                ">
 
                     <ExecutionState
                         event={
-                            currentState
+                            activeEvent
+                        }
+
+                        previousEvent={
+                            previousActiveEvent
                         }
                     />
 
-                </section>
+                </div>
 
             )}
 
         </div>
     );
 }
-
-
-export default App;

@@ -12,26 +12,18 @@ public class Main {
 
         String sourceCode = """
                 public class Test {
-
-                    public static void main(String[] args) {
-
-                        int result = factorial(3);
-
-                        System.out.println(result);
-                    }
-
-                    static int factorial(int n) {
-
-                        if (n == 0) {
-                            return 1;
-                        }
-
-                        int result =
-                                n * factorial(n - 1);
-
-                        return result;
-                    }
-                }
+                
+                     public static void main(String[] args) {
+                
+                         int[] arr = {10, 20, 30, 40};
+                
+                         arr[1] = 99;
+                
+                         int x = arr[2];
+                
+                         System.out.println(x);
+                     }
+                 }
                 """;
 
         try {

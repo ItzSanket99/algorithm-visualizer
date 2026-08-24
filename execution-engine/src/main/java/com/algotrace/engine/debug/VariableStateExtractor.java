@@ -34,6 +34,7 @@ public class VariableStateExtractor {
             }
 
         } catch (Exception ignored) {
+
             /*
              * Some JVM frames may not expose
              * local variable information.
@@ -49,13 +50,87 @@ public class VariableStateExtractor {
             return "null";
         }
 
+        /*
+         * =========================================
+         * ARRAYS
+         * =========================================
+         */
+
         if (value instanceof ArrayReference array) {
 
-            return "array[length="
-                    + array.length()
-                    + "]";
+            return formatArray(array);
         }
 
+        /*
+         * =========================================
+         * OBJECTS
+         * =========================================
+         */
+
+        if (value instanceof ObjectReference object) {
+
+            return object.referenceType().name();
+        }
+
+        /*
+         * =========================================
+         * PRIMITIVE VALUES
+         * =========================================
+         */
+
+        return value.toString();
+    }
+
+    private String formatArray(ArrayReference array) {
+
+        try {
+
+            List<Value> values =
+                    array.getValues();
+
+            StringBuilder result =
+                    new StringBuilder();
+
+            result.append("[");
+
+            for (int i = 0; i < values.size(); i++) {
+
+                if (i > 0) {
+                    result.append(", ");
+                }
+
+                result.append(
+                        formatArrayElement(values.get(i))
+                );
+            }
+
+            result.append("]");
+
+            return result.toString();
+
+        } catch (Exception ignored) {
+
+            return "[]";
+        }
+    }
+
+    private String formatArrayElement(Value value) {
+
+        if (value == null) {
+            return "null";
+        }
+
+        /*
+         * Nested arrays
+         */
+        if (value instanceof ArrayReference nestedArray) {
+
+            return formatArray(nestedArray);
+        }
+
+        /*
+         * Objects inside arrays
+         */
         if (value instanceof ObjectReference object) {
 
             return object.referenceType().name();

@@ -1,21 +1,13 @@
 public class Test {
 
-    public static void main(String[] args) {
+     public static void main(String[] args) {
 
-        int result = factorial(3);
+         int[] arr = {10, 20, 30, 40};
 
-        System.out.println(result);
-    }
+         arr[1] = 99;
 
-    static int factorial(int n) {
+         int x = arr[2];
 
-        if (n == 0) {
-            return 1;
-        }
-
-        int result =
-                n * factorial(n - 1);
-
-        return result;
-    }
-}
+         System.out.println(x);
+     }
+ }
