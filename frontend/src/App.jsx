@@ -5,6 +5,7 @@ import CallTree from "./components/CallTree";
 import ExecutionState from "./components/ExecutionState";
 
 import { executeCode } from "./services/executionApi";
+import StackVisualizer from "./components/StackVisualizer";
 
 
 /* =========================================================
@@ -375,6 +376,371 @@ function buildArrayStates(events) {
 
     return states;
 }
+
+
+/* =========================================================
+   STACK HELPERS
+   ========================================================= */
+
+/*
+ * A Stack value is represented by the execution engine as:
+ *
+ * STACK:[10, 20, 30]
+ *
+ * This marker deliberately differs from normal arrays so
+ * Stack objects are not accidentally treated as arrays.
+ */
+function isStackValue(value) {
+
+    return (
+        typeof value === "string" &&
+        value.trim().startsWith("STACK:[") &&
+        value.trim().endsWith("]")
+    );
+}
+
+
+function parseStackValue(value) {
+
+    if (!isStackValue(value)) {
+        return [];
+    }
+
+    const text =
+        value
+            .trim()
+            .slice(7, -1)
+            .trim();
+
+    if (!text) {
+        return [];
+    }
+
+    const result = [];
+
+    let current = "";
+    let depth = 0;
+
+    for (
+        let i = 0;
+        i < text.length;
+        i++
+    ) {
+
+        const char =
+            text[i];
+
+        if (char === "[") {
+
+            depth++;
+            current += char;
+
+            continue;
+        }
+
+        if (char === "]") {
+
+            depth--;
+            current += char;
+
+            continue;
+        }
+
+        if (
+            char === "," &&
+            depth === 0
+        ) {
+
+            result.push(
+                current.trim()
+            );
+
+            current = "";
+
+            continue;
+        }
+
+        current += char;
+    }
+
+    if (current.trim()) {
+
+        result.push(
+            current.trim()
+        );
+    }
+
+    return result;
+}
+
+
+function getStackVariables(event) {
+
+    if (!event) {
+        return {};
+    }
+
+    const variables =
+        event.variables || {};
+
+    const stacks = {};
+
+    Object.entries(
+        variables
+    ).forEach(
+        ([name, value]) => {
+
+            if (
+                name === "args"
+            ) {
+                return;
+            }
+
+            if (
+                isStackValue(value)
+            ) {
+
+                stacks[name] =
+                    value;
+            }
+
+        }
+    );
+
+    return stacks;
+}
+
+
+function getStackOperation(
+    sourceCode,
+    lineNumber
+) {
+
+    if (
+        !sourceCode ||
+        !lineNumber
+    ) {
+        return "EXECUTE";
+    }
+
+    const lines =
+        sourceCode.split("\n");
+
+    const line =
+        (
+            lines[
+                lineNumber - 1
+            ] || ""
+        ).trim();
+
+
+    if (
+        /\.push\s*\(/.test(line)
+    ) {
+        return "PUSH";
+    }
+
+
+    if (
+        /\.pop\s*\(/.test(line)
+    ) {
+        return "POP";
+    }
+
+
+    if (
+        /\.peek\s*\(/.test(line)
+    ) {
+        return "PEEK";
+    }
+
+
+    if (
+        /\.(isEmpty|empty)\s*\(/.test(line)
+    ) {
+        return "IS EMPTY";
+    }
+
+
+    if (
+        /\.search\s*\(/.test(line)
+    ) {
+        return "SEARCH";
+    }
+
+
+    if (
+        /new\s+Stack\s*</.test(line) ||
+        /new\s+Stack\s*\(/.test(line)
+    ) {
+        return "CREATE";
+    }
+
+
+    return "EXECUTE";
+}
+
+
+function getStackOperationValue(
+    operation,
+    current,
+    previous
+) {
+
+    if (
+        operation === "PUSH" &&
+        current.length > previous.length
+    ) {
+
+        return current[
+            current.length - 1
+        ];
+    }
+
+
+    if (
+        operation === "POP" &&
+        current.length < previous.length
+    ) {
+
+        return previous[
+            previous.length - 1
+        ];
+    }
+
+
+    if (
+        operation === "PEEK" &&
+        current.length > 0
+    ) {
+
+        return current[
+            current.length - 1
+        ];
+    }
+
+
+    if (
+        operation === "IS EMPTY"
+    ) {
+
+        return current.length === 0
+            ? "true"
+            : "false";
+    }
+
+
+    if (
+        operation === "CREATE"
+    ) {
+
+        return current.length === 0
+            ? "empty"
+            : `${current.length} elements`;
+    }
+
+
+    return "—";
+}
+
+
+function buildStackStates(
+    events,
+    sourceCode
+) {
+
+    const states = [];
+
+    let previousStacks = {};
+
+
+    for (
+        const event of events
+    ) {
+
+        if (
+            event.eventType !==
+            "LINE_EXECUTED"
+        ) {
+            continue;
+        }
+
+
+        const stacks =
+            getStackVariables(
+                event
+            );
+
+
+        if (
+            Object.keys(stacks).length === 0
+        ) {
+            continue;
+        }
+
+
+        /*
+         * Visualize the first Stack variable
+         * available at this execution point.
+         */
+
+        const name =
+            Object.keys(stacks)[0];
+
+        const stack =
+            parseStackValue(
+                stacks[name]
+            );
+
+
+        const previousValue =
+            previousStacks[name] ||
+            "STACK:[]";
+
+        const previousStack =
+            parseStackValue(
+                previousValue
+            );
+
+
+        const operation =
+            getStackOperation(
+                sourceCode,
+                event.lineNumber
+            );
+
+
+        states.push({
+
+            event,
+
+            name,
+
+            stack,
+
+            previousStack,
+
+            operation,
+
+            operationValue:
+                getStackOperationValue(
+                    operation,
+                    stack,
+                    previousStack
+                )
+
+        });
+
+
+        previousStacks = {
+            ...stacks
+        };
+    }
+
+
+    return states;
+}
+
 
 /* =========================================================
    PARAMETER FORMATTER
@@ -839,6 +1205,16 @@ export default function App() {
 
     /*
      * -------------------------------------------------------
+     * STACK PLAYBACK
+     * -------------------------------------------------------
+     */
+
+    const [currentStackIndex, setCurrentStackIndex] =
+        useState(0);
+
+
+    /*
+     * -------------------------------------------------------
      * RUN STATE
      * -------------------------------------------------------
      */
@@ -903,6 +1279,26 @@ export default function App() {
 
     /*
      * =======================================================
+     * STACK STATES
+     * =======================================================
+     */
+
+    const stackStates =
+        useMemo(
+            () =>
+                buildStackStates(
+                    events,
+                    sourceCode
+                ),
+            [
+                events,
+                sourceCode
+            ]
+        );
+
+
+    /*
+     * =======================================================
      * AUTO DETECTION
      * =======================================================
      *
@@ -920,7 +1316,9 @@ export default function App() {
             ? (
                 arrayStates.length > 0
                     ? "array"
-                    : "recursion"
+                    : stackStates.length > 0
+                        ? "stack"
+                        : "recursion"
             )
             : visualizationMode;
 
@@ -1012,6 +1410,35 @@ export default function App() {
 
     /*
      * =======================================================
+     * CURRENT STACK EVENT INDEX
+     * =======================================================
+     *
+     * The StackVisualizer reconstructs the call stack by
+     * replaying execution events up to the selected method
+     * entry.
+     *
+     * We intentionally use the selected recursion call here
+     * instead of changing the execution engine.
+     */
+
+    const currentStackEventIndex =
+        currentCall
+            ? events.findIndex(
+                event =>
+                    event.eventType ===
+                        "METHOD_ENTER" &&
+                    String(
+                        event.callId
+                    ) ===
+                        String(
+                            currentCall.callId
+                        )
+            )
+            : -1;
+
+
+    /*
+     * =======================================================
      * CURRENT ARRAY STATE
      * =======================================================
      */
@@ -1036,6 +1463,30 @@ export default function App() {
 
     /*
      * =======================================================
+     * CURRENT STACK STATE
+     * =======================================================
+     */
+
+    const currentStackState =
+        stackStates[
+            currentStackIndex
+        ] || null;
+
+
+    /*
+     * =======================================================
+     * PREVIOUS STACK STATE
+     * =======================================================
+     */
+
+    const previousStackState =
+        stackStates[
+            currentStackIndex - 1
+        ] || null;
+
+
+    /*
+     * =======================================================
      * ACTIVE EVENT
      * =======================================================
      */
@@ -1043,7 +1494,9 @@ export default function App() {
     const activeEvent =
         effectiveMode === "array"
             ? currentArrayState?.event
-            : currentRecursionEvent;
+            : effectiveMode === "stack"
+                ? currentStackState?.event
+                : currentRecursionEvent;
 
 
     /*
@@ -1055,7 +1508,9 @@ export default function App() {
     const previousActiveEvent =
         effectiveMode === "array"
             ? previousArrayState?.event
-            : previousRecursionEvent;
+            : effectiveMode === "stack"
+                ? previousStackState?.event
+                : previousRecursionEvent;
 
 
     /*
@@ -1086,6 +1541,8 @@ export default function App() {
         setCurrentCallIndex(0);
 
         setCurrentArrayIndex(0);
+
+        setCurrentStackIndex(0);
 
 
         try {
@@ -1207,6 +1664,42 @@ export default function App() {
 
     /*
      * =======================================================
+     * STACK PREVIOUS
+     * =======================================================
+     */
+
+    function handlePreviousStack() {
+
+        setCurrentStackIndex(
+            index =>
+                Math.max(
+                    0,
+                    index - 1
+                )
+        );
+    }
+
+
+    /*
+     * =======================================================
+     * STACK NEXT
+     * =======================================================
+     */
+
+    function handleNextStack() {
+
+        setCurrentStackIndex(
+            index =>
+                Math.min(
+                    stackStates.length - 1,
+                    index + 1
+                )
+        );
+    }
+
+
+    /*
+     * =======================================================
      * CALL TREE SELECTION
      * =======================================================
      */
@@ -1280,6 +1773,14 @@ export default function App() {
         ) {
 
             setCurrentCallIndex(0);
+        }
+
+
+        if (
+            value === "stack"
+        ) {
+
+            setCurrentStackIndex(0);
         }
 
     }
@@ -1435,9 +1936,9 @@ export default function App() {
 
                         <option
                             value="stack"
-                            disabled
+                            
                         >
-                            Stack — Coming Soon
+                            Stack
                         </option>
 
                         <option
@@ -1502,7 +2003,9 @@ export default function App() {
                         {
                             effectiveMode === "array"
                                 ? "Array Visualization"
-                                : "Recursion Tree"
+                                : effectiveMode === "stack"
+                                    ? "Call Stack"
+                                    : "Recursion Tree"
                         }
 
                     </span>
@@ -1632,7 +2135,9 @@ export default function App() {
                                 {
                                     effectiveMode === "array"
                                         ? "Array Visualization"
-                                        : "Recursion Tree"
+                                        : effectiveMode === "stack"
+                                            ? "Call Stack"
+                                            : "Recursion Tree"
                                 }
 
                             </h2>
@@ -1647,7 +2152,9 @@ export default function App() {
                                 {
                                     effectiveMode === "array"
                                         ? "Current array state during execution."
-                                        : "Recursive calls during execution."
+                                        : effectiveMode === "stack"
+                                            ? "Push, pop, peek and stack state during execution."
+                                            : "Recursive calls during execution."
                                 }
 
                             </p>
@@ -1669,7 +2176,9 @@ export default function App() {
                             {
                                 effectiveMode === "array"
                                     ? "ARRAY"
-                                    : "RECURSION"
+                                    : effectiveMode === "stack"
+                                        ? "STACK"
+                                        : "RECURSION"
                             }
 
                         </span>
@@ -1745,6 +2254,66 @@ export default function App() {
                                 ">
                                     Run your code to see
                                     the array visualization.
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    )}
+
+
+                    {/* =================================================
+                        STACK
+                    ================================================= */}
+
+                    {effectiveMode === "stack" && (
+
+                        <div className="
+                            h-[450px]
+                            overflow-auto
+                        ">
+
+                            {execution ? (
+
+                                stackStates.length > 0 ? (
+
+                                    <StackVisualizer
+                                        state={
+                                            currentStackState
+                                        }
+                                    />
+
+                                ) : (
+
+                                    <div className="
+                                        flex
+                                        h-full
+                                        items-center
+                                        justify-center
+                                        text-center
+                                        text-xs
+                                        text-slate-500
+                                    ">
+                                        No java.util.Stack was
+                                        detected in this execution.
+                                    </div>
+
+                                )
+
+                            ) : (
+
+                                <div className="
+                                    flex
+                                    h-full
+                                    items-center
+                                    justify-center
+                                    text-center
+                                    text-xs
+                                    text-slate-500
+                                ">
+                                    Run your code to see
+                                    the stack visualization.
                                 </div>
 
                             )}
@@ -1913,6 +2482,125 @@ export default function App() {
                         disabled={
                             currentArrayIndex >=
                             arrayStates.length - 1
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        Next State →
+                    </button>
+
+                </div>
+
+            )}
+
+
+            {/* =================================================
+                STACK PLAYBACK
+            ================================================= */}
+
+            {effectiveMode === "stack" &&
+                stackStates.length > 0 && (
+
+                <div className="
+                    mt-3
+                    flex
+                    items-center
+                    justify-between
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#161b22]
+                    px-4
+                    py-3
+                ">
+
+                    <button
+                        type="button"
+                        onClick={
+                            handlePreviousStack
+                        }
+                        disabled={
+                            currentStackIndex === 0
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        ← Previous State
+                    </button>
+
+
+                    <div className="
+                        min-w-0
+                        flex-1
+                        px-5
+                        text-center
+                    ">
+
+                        <p className="
+                            text-xs
+                            font-semibold
+                        ">
+                            Stack State{" "}
+                            {currentStackIndex + 1}
+                            {" "}
+                            of{" "}
+                            {stackStates.length}
+                        </p>
+
+
+                        <p className="
+                            mt-1
+                            font-mono
+                            text-[10px]
+                            text-[#6685ff]
+                        ">
+                            {
+                                currentStackState?.operation
+                            }
+                            {" · Line "}
+                            {
+                                currentStackState
+                                    ?.event
+                                    ?.lineNumber ??
+                                "—"
+                            }
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        onClick={
+                            handleNextStack
+                        }
+                        disabled={
+                            currentStackIndex >=
+                            stackStates.length - 1
                         }
                         className="
                             rounded-md
