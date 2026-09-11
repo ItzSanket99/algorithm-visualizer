@@ -3,9 +3,12 @@ import { useMemo, useState } from "react";
 import CodeViewer from "./components/CodeViewer";
 import CallTree from "./components/CallTree";
 import ExecutionState from "./components/ExecutionState";
+import QueuePanel, {
+    buildQueueStates
+} from "./components/QueuePanel";
+import StackVisualizer from "./components/StackVisualizer";
 
 import { executeCode } from "./services/executionApi";
-import StackVisualizer from "./components/StackVisualizer";
 
 
 /* =========================================================
@@ -36,16 +39,6 @@ const DEFAULT_CODE = `public class Test {
    ARRAY HELPERS
    ========================================================= */
 
-/*
- * Checks whether a runtime value is represented
- * as an array.
- *
- * Examples:
- *
- * [10, 20, 30]
- * [10, 99, 30, 40]
- * []
- */
 function isArrayValue(value) {
 
     if (typeof value !== "string") {
@@ -61,15 +54,6 @@ function isArrayValue(value) {
 }
 
 
-/*
- * Convert:
- *
- * "[10, 99, 30, 40]"
- *
- * into:
- *
- * ["10", "99", "30", "40"]
- */
 function parseArrayValue(value) {
 
     if (!isArrayValue(value)) {
@@ -91,19 +75,28 @@ function parseArrayValue(value) {
     let current = "";
     let depth = 0;
 
-    for (let i = 0; i < content.length; i++) {
+    for (
+        let i = 0;
+        i < content.length;
+        i++
+    ) {
 
-        const char = content[i];
+        const char =
+            content[i];
 
         if (char === "[") {
+
             depth++;
             current += char;
+
             continue;
         }
 
         if (char === "]") {
+
             depth--;
             current += char;
+
             continue;
         }
 
@@ -136,16 +129,11 @@ function parseArrayValue(value) {
 
 
 /*
- * Get all real algorithm arrays from an event.
- *
- * IMPORTANT:
- *
- * We deliberately exclude:
- *
- * args
- *
- * and every method parameter.
+ * =========================================================
+ * ARRAY VARIABLES
+ * =========================================================
  */
+
 function getArrayVariables(event) {
 
     if (!event) {
@@ -162,16 +150,7 @@ function getArrayVariables(event) {
 
 
     /*
-     * =====================================================
-     * 1. LOCAL VARIABLES
-     * =====================================================
-     *
-     * If a normal local variable contains an array,
-     * include it.
-     *
-     * Example:
-     *
-     * int[] arr = {10, 20, 30};
+     * LOCAL VARIABLES
      */
 
     Object.entries(
@@ -179,25 +158,31 @@ function getArrayVariables(event) {
     ).forEach(
         ([name, value]) => {
 
-            /*
-             * String[] args is never an
-             * algorithm array.
-             */
-
             if (name === "args") {
                 return;
             }
 
-
             /*
-             * Include actual array values.
+             * Don't duplicate array parameters.
              */
+
+            if (
+                Object.prototype
+                    .hasOwnProperty
+                    .call(
+                        parameters,
+                        name
+                    )
+            ) {
+                return;
+            }
 
             if (
                 isArrayValue(value)
             ) {
 
-                arrays[name] = value;
+                arrays[name] =
+                    value;
             }
 
         }
@@ -205,23 +190,11 @@ function getArrayVariables(event) {
 
 
     /*
-     * =====================================================
-     * 2. ARRAY PARAMETERS
-     * =====================================================
+     * ARRAY PARAMETERS
      *
-     * IMPORTANT:
-     *
-     * An algorithm array can be passed
-     * into another method.
-     *
-     * Example:
+     * Important for:
      *
      * selectionSort(int[] arr)
-     *
-     * Here arr is technically a parameter,
-     * but it is still the SAME algorithm array.
-     *
-     * Therefore we MUST include array parameters.
      */
 
     Object.entries(
@@ -229,30 +202,13 @@ function getArrayVariables(event) {
     ).forEach(
         ([name, value]) => {
 
-            /*
-             * Only ignore Java's main args.
-             */
-
             if (name === "args") {
                 return;
             }
 
-
-            /*
-             * Include parameter only if
-             * it is actually an array.
-             */
-
             if (
                 isArrayValue(value)
             ) {
-
-                /*
-                 * Prefer the value already
-                 * captured from local variables.
-                 *
-                 * Otherwise use the parameter.
-                 */
 
                 if (
                     !Object.prototype
@@ -276,9 +232,23 @@ function getArrayVariables(event) {
     return arrays;
 }
 
+
 /* =========================================================
    ARRAY STATE EXTRACTION
+   =========================================================
+   
+   IMPORTANT:
+   
+   Every LINE_EXECUTED event containing an array
+   is retained.
+
+   We DO NOT remove duplicate array snapshots.
+
+   This is required for algorithms like Selection Sort
+   where i / j / minIndex change while the array stays
+   unchanged.
    ========================================================= */
+
 function buildArrayStates(events) {
 
     const states = [];
@@ -286,12 +256,9 @@ function buildArrayStates(events) {
     let previousArrays = {};
 
 
-    for (const event of events) {
-
-        /*
-         * Only actual source-line execution
-         * events can become array states.
-         */
+    for (
+        const event of events
+    ) {
 
         if (
             event.eventType !==
@@ -301,25 +268,11 @@ function buildArrayStates(events) {
         }
 
 
-        /*
-         * Find every array available
-         * at this execution point.
-         *
-         * This includes:
-         *
-         * - local arrays
-         * - array parameters
-         */
-
         const arrays =
             getArrayVariables(
                 event
             );
 
-
-        /*
-         * No array at this point.
-         */
 
         if (
             Object.keys(arrays).length === 0
@@ -327,30 +280,6 @@ function buildArrayStates(events) {
             continue;
         }
 
-
-        /*
-         * IMPORTANT:
-         *
-         * Do NOT compare snapshots here.
-         *
-         * Every LINE_EXECUTED event containing
-         * an array is an execution state.
-         *
-         * Even if:
-         *
-         * [64,25,12,22,11]
-         *
-         * has not changed yet, variables such as
-         *
-         * i
-         * j
-         * minIndex
-         *
-         * may have changed.
-         *
-         * Therefore it is still a meaningful
-         * execution step.
-         */
 
         states.push({
 
@@ -363,14 +292,10 @@ function buildArrayStates(events) {
         });
 
 
-        /*
-         * Save current state for
-         * visual change highlighting.
-         */
-
         previousArrays = {
             ...arrays
         };
+
     }
 
 
@@ -382,20 +307,16 @@ function buildArrayStates(events) {
    STACK HELPERS
    ========================================================= */
 
-/*
- * A Stack value is represented by the execution engine as:
- *
- * STACK:[10, 20, 30]
- *
- * This marker deliberately differs from normal arrays so
- * Stack objects are not accidentally treated as arrays.
- */
 function isStackValue(value) {
 
     return (
         typeof value === "string" &&
-        value.trim().startsWith("STACK:[") &&
-        value.trim().endsWith("]")
+        value
+            .trim()
+            .startsWith("STACK:[") &&
+        value
+            .trim()
+            .endsWith("]")
     );
 }
 
@@ -406,20 +327,24 @@ function parseStackValue(value) {
         return [];
     }
 
+
     const text =
         value
             .trim()
             .slice(7, -1)
             .trim();
 
+
     if (!text) {
         return [];
     }
+
 
     const result = [];
 
     let current = "";
     let depth = 0;
+
 
     for (
         let i = 0;
@@ -430,6 +355,7 @@ function parseStackValue(value) {
         const char =
             text[i];
 
+
         if (char === "[") {
 
             depth++;
@@ -438,6 +364,7 @@ function parseStackValue(value) {
             continue;
         }
 
+
         if (char === "]") {
 
             depth--;
@@ -445,6 +372,7 @@ function parseStackValue(value) {
 
             continue;
         }
+
 
         if (
             char === "," &&
@@ -460,8 +388,10 @@ function parseStackValue(value) {
             continue;
         }
 
+
         current += char;
     }
+
 
     if (current.trim()) {
 
@@ -469,6 +399,7 @@ function parseStackValue(value) {
             current.trim()
         );
     }
+
 
     return result;
 }
@@ -480,21 +411,22 @@ function getStackVariables(event) {
         return {};
     }
 
+
     const variables =
         event.variables || {};
 
     const stacks = {};
+
 
     Object.entries(
         variables
     ).forEach(
         ([name, value]) => {
 
-            if (
-                name === "args"
-            ) {
+            if (name === "args") {
                 return;
             }
+
 
             if (
                 isStackValue(value)
@@ -507,9 +439,14 @@ function getStackVariables(event) {
         }
     );
 
+
     return stacks;
 }
 
+
+/* =========================================================
+   STACK OPERATION
+   ========================================================= */
 
 function getStackOperation(
     sourceCode,
@@ -523,8 +460,10 @@ function getStackOperation(
         return "EXECUTE";
     }
 
+
     const lines =
         sourceCode.split("\n");
+
 
     const line =
         (
@@ -580,6 +519,10 @@ function getStackOperation(
     return "EXECUTE";
 }
 
+
+/* =========================================================
+   STACK OPERATION VALUE
+   ========================================================= */
 
 function getStackOperationValue(
     operation,
@@ -644,6 +587,10 @@ function getStackOperationValue(
 }
 
 
+/* =========================================================
+   STACK STATE EXTRACTION
+   ========================================================= */
+
 function buildStackStates(
     events,
     sourceCode
@@ -679,13 +626,9 @@ function buildStackStates(
         }
 
 
-        /*
-         * Visualize the first Stack variable
-         * available at this execution point.
-         */
-
         const name =
             Object.keys(stacks)[0];
+
 
         const stack =
             parseStackValue(
@@ -696,6 +639,7 @@ function buildStackStates(
         const previousValue =
             previousStacks[name] ||
             "STACK:[]";
+
 
         const previousStack =
             parseStackValue(
@@ -735,6 +679,246 @@ function buildStackStates(
         previousStacks = {
             ...stacks
         };
+
+    }
+
+
+    return states;
+}
+
+
+/* =========================================================
+   LINKED LIST HELPERS
+   =========================================================
+   
+   Backend representation:
+   
+   LINKED_LIST:[10 -> 20 -> 30]
+   
+   or
+   
+   LINKED_LIST:[10 -> 20 -> 30 -> 40]
+   ========================================================= */
+
+function isLinkedListValue(value) {
+
+    return (
+        typeof value === "string" &&
+        value
+            .trim()
+            .startsWith("LINKED_LIST:[") &&
+        value
+            .trim()
+            .endsWith("]")
+    );
+}
+
+
+/*
+ * Convert:
+ *
+ * LINKED_LIST:[10 -> 20 -> 30]
+ *
+ * into:
+ *
+ * ["10", "20", "30"]
+ */
+
+function parseLinkedListValue(value) {
+
+    if (!isLinkedListValue(value)) {
+        return [];
+    }
+
+
+    const text =
+        value
+            .trim()
+            .slice(
+                "LINKED_LIST:[".length,
+                -1
+            )
+            .trim();
+
+
+    if (!text) {
+        return [];
+    }
+
+
+    return text
+        .split("->")
+        .map(
+            item =>
+                item.trim()
+        )
+        .filter(
+            item =>
+                item.length > 0
+        );
+}
+
+
+/*
+ * Get Linked List variables from
+ * one execution event.
+ */
+
+function getLinkedListVariables(event) {
+
+    if (!event) {
+        return {};
+    }
+
+
+    const variables =
+        event.variables || {};
+
+    const parameters =
+        event.parameters || {};
+
+    const lists = {};
+
+
+    Object.entries(
+        variables
+    ).forEach(
+        ([name, value]) => {
+
+            /*
+             * Ignore method parameters
+             * and main args.
+             */
+
+            if (name === "args") {
+                return;
+            }
+
+
+            if (
+                Object.prototype
+                    .hasOwnProperty
+                    .call(
+                        parameters,
+                        name
+                    )
+            ) {
+                return;
+            }
+
+
+            if (
+                isLinkedListValue(value)
+            ) {
+
+                lists[name] =
+                    value;
+            }
+
+        }
+    );
+
+
+    /*
+     * Linked List parameters
+     */
+
+    Object.entries(
+        parameters
+    ).forEach(
+        ([name, value]) => {
+
+            if (name === "args") {
+                return;
+            }
+
+
+            if (
+                isLinkedListValue(value)
+            ) {
+
+                if (
+                    !Object.prototype
+                        .hasOwnProperty
+                        .call(
+                            lists,
+                            name
+                        )
+                ) {
+
+                    lists[name] =
+                        value;
+                }
+
+            }
+
+        }
+    );
+
+
+    return lists;
+}
+
+
+/* =========================================================
+   LINKED LIST STATE EXTRACTION
+   ========================================================= */
+
+function buildLinkedListStates(events) {
+
+    const states = [];
+
+    let previousLists = {};
+
+
+    for (
+        const event of events
+    ) {
+
+        if (
+            event.eventType !==
+            "LINE_EXECUTED"
+        ) {
+            continue;
+        }
+
+
+        const lists =
+            getLinkedListVariables(
+                event
+            );
+
+
+        if (
+            Object.keys(lists).length === 0
+        ) {
+            continue;
+        }
+
+
+        /*
+         * Use every LINE_EXECUTED event.
+         *
+         * This is important because traversal can
+         * change "current" even when "head" stays
+         * unchanged.
+         */
+
+        states.push({
+
+            event,
+
+            lists,
+
+            previousLists
+
+        });
+
+
+        previousLists = {
+            ...lists
+        };
+
     }
 
 
@@ -754,6 +938,7 @@ function formatParameters(parameters) {
     ) {
         return "";
     }
+
 
     return Object.entries(
         parameters
@@ -842,9 +1027,7 @@ function ArrayPanel({
                         const previousValue =
                             state
                                 .previousArrays
-                                ?.[
-                                    name
-                                ];
+                                ?.[name];
 
 
                         const previousValues =
@@ -865,8 +1048,6 @@ function ArrayPanel({
                                     bg-[#161b22]
                                 "
                             >
-
-                                {/* ARRAY HEADER */}
 
                                 <div className="
                                     flex
@@ -920,8 +1101,6 @@ function ArrayPanel({
                                 </div>
 
 
-                                {/* ARRAY */}
-
                                 {values.length === 0 ? (
 
                                     <div className="
@@ -947,8 +1126,6 @@ function ArrayPanel({
                                             min-w-full
                                             flex-col
                                         ">
-
-                                            {/* INDEX ROW */}
 
                                             <div className="
                                                 flex
@@ -978,8 +1155,6 @@ function ArrayPanel({
 
                                             </div>
 
-
-                                            {/* VALUE ROW */}
 
                                             <div className="
                                                 flex
@@ -1049,8 +1224,6 @@ function ArrayPanel({
 
                                             </div>
 
-
-                                            {/* CHANGE INFORMATION */}
 
                                             <div className="
                                                 flex
@@ -1133,6 +1306,686 @@ function ArrayPanel({
                             </div>
 
                         );
+
+                    }
+                )}
+
+            </div>
+
+        </div>
+    );
+}
+
+
+/* =========================================================
+   STACK DATA PANEL
+   ========================================================= */
+
+function StackDataPanel({
+    state
+}) {
+
+    if (!state) {
+
+        return (
+
+            <div className="
+                flex
+                h-full
+                items-center
+                justify-center
+                text-center
+            ">
+
+                <div>
+
+                    <p className="
+                        text-sm
+                        font-semibold
+                        text-slate-300
+                    ">
+                        No stack execution state
+                    </p>
+
+                </div>
+
+            </div>
+        );
+    }
+
+
+    const stack =
+        state.stack || [];
+
+
+    return (
+
+        <div className="
+            h-full
+            overflow-auto
+            p-5
+        ">
+
+            <div className="
+                flex
+                flex-col
+                items-center
+            ">
+
+                <div className="
+                    mb-4
+                    flex
+                    w-full
+                    items-center
+                    justify-between
+                ">
+
+                    <div className="
+                        flex
+                        items-center
+                        gap-2
+                    ">
+
+                        <span className="
+                            text-sm
+                            font-semibold
+                            text-slate-200
+                        ">
+                            {state.name}
+                        </span>
+
+                        <span className="
+                            rounded
+                            border
+                            border-[#30363d]
+                            px-2
+                            py-0.5
+                            text-[9px]
+                            font-semibold
+                            text-[#6685ff]
+                        ">
+                            STACK
+                        </span>
+
+                    </div>
+
+
+                    <span className="
+                        rounded
+                        border
+                        border-[#30363d]
+                        bg-[#161b22]
+                        px-2
+                        py-1
+                        text-[9px]
+                        font-semibold
+                        text-slate-500
+                    ">
+                        {state.operation}
+                    </span>
+
+                </div>
+
+
+                {stack.length === 0 ? (
+
+                    <div className="
+                        flex
+                        h-28
+                        w-64
+                        items-center
+                        justify-center
+                        rounded-lg
+                        border
+                        border-dashed
+                        border-[#30363d]
+                        bg-[#0d1117]
+                        text-xs
+                        text-slate-500
+                    ">
+                        Empty Stack
+                    </div>
+
+                ) : (
+
+                    <div className="
+                        flex
+                        flex-col-reverse
+                        items-center
+                        gap-1
+                    ">
+
+                        {stack.map(
+                            (
+                                value,
+                                index
+                            ) => {
+
+                                const previousValue =
+                                    state
+                                        .previousStack[
+                                            index
+                                        ];
+
+
+                                const changed =
+                                    previousValue !==
+                                        undefined &&
+                                    previousValue !==
+                                        value;
+
+
+                                const isTop =
+                                    index ===
+                                    stack.length - 1;
+
+
+                                return (
+
+                                    <div
+                                        key={
+                                            `stack-${index}`
+                                        }
+                                        className={`
+                                            relative
+                                            flex
+                                            min-h-[46px]
+                                            w-64
+                                            items-center
+                                            justify-center
+                                            rounded-md
+                                            border
+                                            border-[#30363d]
+                                            px-4
+                                            font-mono
+                                            text-sm
+                                            font-semibold
+                                            ${
+                                                changed
+                                                    ? `
+                                                        bg-[#526ff5]/15
+                                                        text-[#6685ff]
+                                                        ring-1
+                                                        ring-inset
+                                                        ring-[#526ff5]
+                                                      `
+                                                    : `
+                                                        bg-[#161b22]
+                                                        text-slate-200
+                                                      `
+                                            }
+                                        `}
+                                    >
+
+                                        {value}
+
+
+                                        {isTop && (
+
+                                            <span className="
+                                                absolute
+                                                -right-16
+                                                text-[9px]
+                                                font-semibold
+                                                text-[#6685ff]
+                                            ">
+                                                TOP →
+                                            </span>
+
+                                        )}
+
+                                    </div>
+
+                                );
+
+                            }
+                        )}
+
+                    </div>
+
+                )}
+
+
+                <div className="
+                    mt-4
+                    text-[10px]
+                    text-slate-500
+                ">
+                    size = {stack.length}
+                </div>
+
+
+                <div className="
+                    mt-1
+                    font-mono
+                    text-[10px]
+                    text-[#6685ff]
+                ">
+                    Line {
+                        state.event?.lineNumber ??
+                        "—"
+                    }
+                </div>
+
+            </div>
+
+        </div>
+    );
+}
+
+
+/* =========================================================
+   LINKED LIST PANEL
+   ========================================================= */
+
+function LinkedListPanel({
+    state
+}) {
+
+    if (!state) {
+
+        return (
+
+            <div className="
+                flex
+                h-full
+                items-center
+                justify-center
+                text-center
+            ">
+
+                <div>
+
+                    <p className="
+                        text-sm
+                        font-semibold
+                        text-slate-300
+                    ">
+                        No linked list state
+                    </p>
+
+                    <p className="
+                        mt-2
+                        text-xs
+                        text-slate-500
+                    ">
+                        Run your code to see
+                        the linked list visualization.
+                    </p>
+
+                </div>
+
+            </div>
+        );
+    }
+
+
+    const lists =
+        state.lists || {};
+
+
+    return (
+
+        <div className="
+            h-full
+            overflow-auto
+            p-5
+        ">
+
+            <div className="
+                space-y-6
+            ">
+
+                {Object.entries(
+                    lists
+                ).map(
+                    ([name, value]) => {
+
+                        const values =
+                            parseLinkedListValue(
+                                value
+                            );
+
+
+                        const previousValue =
+                            state
+                                .previousLists
+                                ?.[name];
+
+
+                        const previousValues =
+                            parseLinkedListValue(
+                                previousValue
+                            );
+
+
+                        return (
+
+                            <div
+                                key={name}
+                                className="
+                                    rounded-lg
+                                    border
+                                    border-[#30363d]
+                                    bg-[#161b22]
+                                    p-4
+                                "
+                            >
+
+                                {/* HEADER */}
+
+                                <div className="
+                                    mb-5
+                                    flex
+                                    items-center
+                                    justify-between
+                                ">
+
+                                    <div className="
+                                        flex
+                                        items-center
+                                        gap-2
+                                    ">
+
+                                        <span className="
+                                            text-sm
+                                            font-semibold
+                                            text-slate-200
+                                        ">
+                                            {name}
+                                        </span>
+
+                                        <span className="
+                                            rounded
+                                            border
+                                            border-[#30363d]
+                                            px-2
+                                            py-0.5
+                                            text-[9px]
+                                            font-semibold
+                                            text-[#6685ff]
+                                        ">
+                                            LINKED LIST
+                                        </span>
+
+                                    </div>
+
+
+                                    <span className="
+                                        text-[10px]
+                                        text-slate-500
+                                    ">
+                                        nodes = {
+                                            values.length
+                                        }
+                                    </span>
+
+                                </div>
+
+
+                                {/* LIST */}
+
+                                {values.length === 0 ? (
+
+                                    <div className="
+                                        flex
+                                        h-24
+                                        items-center
+                                        justify-center
+                                        rounded-lg
+                                        border
+                                        border-dashed
+                                        border-[#30363d]
+                                        bg-[#0d1117]
+                                        text-xs
+                                        text-slate-500
+                                    ">
+                                        Empty Linked List
+                                    </div>
+
+                                ) : (
+
+                                    <div className="
+                                        overflow-x-auto
+                                        pb-3
+                                    ">
+
+                                        <div className="
+                                            flex
+                                            min-w-max
+                                            items-center
+                                            px-3
+                                            py-6
+                                        ">
+
+                                            {/* HEAD */}
+
+                                            <div className="
+                                                mr-3
+                                                flex
+                                                flex-col
+                                                items-center
+                                            ">
+
+                                                <span className="
+                                                    mb-2
+                                                    text-[9px]
+                                                    font-semibold
+                                                    text-[#6685ff]
+                                                ">
+                                                    {name}
+                                                </span>
+
+                                                <div className="
+                                                    h-2
+                                                    w-2
+                                                    rounded-full
+                                                    bg-[#6685ff]
+                                                " />
+
+                                            </div>
+
+
+                                            {values.map(
+                                                (
+                                                    value,
+                                                    index
+                                                ) => {
+
+                                                    const previousValue =
+                                                        previousValues[
+                                                            index
+                                                        ];
+
+
+                                                    const changed =
+                                                        previousValue !==
+                                                            undefined &&
+                                                        previousValue !==
+                                                            value;
+
+
+                                                    return (
+
+                                                        <div
+                                                            key={
+                                                                `node-${index}`
+                                                            }
+                                                            className="
+                                                                flex
+                                                                items-center
+                                                            "
+                                                        >
+
+                                                            {/* NODE */}
+
+                                                            <div className="
+                                                                flex
+                                                                flex-col
+                                                                items-center
+                                                            ">
+
+                                                                <div
+                                                                    className={`
+                                                                        relative
+                                                                        flex
+                                                                        h-16
+                                                                        w-24
+                                                                        items-center
+                                                                        justify-center
+                                                                        rounded-lg
+                                                                        border
+                                                                        ${
+                                                                            changed
+                                                                                ? `
+                                                                                    border-[#526ff5]
+                                                                                    bg-[#526ff5]/15
+                                                                                    text-[#6685ff]
+                                                                                    shadow-[0_0_12px_rgba(82,111,245,0.18)]
+                                                                                  `
+                                                                                : `
+                                                                                    border-[#30363d]
+                                                                                    bg-[#0d1117]
+                                                                                    text-slate-200
+                                                                                  `
+                                                                        }
+                                                                    `}
+                                                                >
+
+                                                                    <span className="
+                                                                        font-mono
+                                                                        text-sm
+                                                                        font-semibold
+                                                                    ">
+                                                                        {value}
+                                                                    </span>
+
+
+                                                                    <span className="
+                                                                        absolute
+                                                                        -top-4
+                                                                        text-[8px]
+                                                                        text-slate-600
+                                                                    ">
+                                                                        {index}
+                                                                    </span>
+
+                                                                </div>
+
+
+                                                                {changed && (
+
+                                                                    <span className="
+                                                                        mt-2
+                                                                        whitespace-nowrap
+                                                                        font-mono
+                                                                        text-[8px]
+                                                                        text-[#6685ff]
+                                                                    ">
+                                                                        {
+                                                                            previousValue
+                                                                        }
+                                                                        {" → "}
+                                                                        {
+                                                                            value
+                                                                        }
+                                                                    </span>
+
+                                                                )}
+
+                                                            </div>
+
+
+                                                            {/* ARROW */}
+
+                                                            <div className="
+                                                                flex
+                                                                items-center
+                                                                px-2
+                                                            ">
+
+                                                                <span className="
+                                                                    text-lg
+                                                                    text-slate-500
+                                                                ">
+                                                                    →
+                                                                </span>
+
+                                                            </div>
+
+                                                        </div>
+
+                                                    );
+
+                                                }
+                                            )}
+
+
+                                            {/* NULL */}
+
+                                            <div className="
+                                                flex
+                                                h-16
+                                                min-w-16
+                                                items-center
+                                                justify-center
+                                                rounded-lg
+                                                border
+                                                border-dashed
+                                                border-[#30363d]
+                                                bg-[#0d1117]
+                                                px-3
+                                                font-mono
+                                                text-xs
+                                                text-slate-500
+                                            ">
+                                                null
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                )}
+
+
+                                {/* FOOTER */}
+
+                                <div className="
+                                    mt-2
+                                    flex
+                                    items-center
+                                    justify-between
+                                    border-t
+                                    border-[#30363d]
+                                    pt-3
+                                ">
+
+                                    <span className="
+                                        text-[10px]
+                                        text-slate-500
+                                    ">
+                                        State during execution
+                                    </span>
+
+                                    <span className="
+                                        font-mono
+                                        text-[10px]
+                                        text-[#6685ff]
+                                    ">
+                                        Line {
+                                            state.event
+                                                ?.lineNumber ??
+                                            "—"
+                                        }
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        );
+
                     }
                 )}
 
@@ -1149,11 +2002,9 @@ function ArrayPanel({
 
 export default function App() {
 
-    /*
-     * -------------------------------------------------------
-     * SOURCE
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       SOURCE
+       ===================================================== */
 
     const [sourceCode, setSourceCode] =
         useState(
@@ -1161,93 +2012,69 @@ export default function App() {
         );
 
 
-    /*
-     * -------------------------------------------------------
-     * EXECUTION
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       EXECUTION
+       ===================================================== */
 
     const [execution, setExecution] =
         useState(null);
 
 
-    /*
-     * -------------------------------------------------------
-     * VISUALIZATION SELECTION
-     *
-     * This is now a dropdown.
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       VISUALIZATION MODE
+       ===================================================== */
 
     const [visualizationMode, setVisualizationMode] =
         useState("auto");
 
 
-    /*
-     * -------------------------------------------------------
-     * RECURSION PLAYBACK
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       PLAYBACK INDEXES
+       ===================================================== */
 
     const [currentCallIndex, setCurrentCallIndex] =
         useState(0);
 
-
-    /*
-     * -------------------------------------------------------
-     * ARRAY PLAYBACK
-     * -------------------------------------------------------
-     */
-
     const [currentArrayIndex, setCurrentArrayIndex] =
         useState(0);
 
-
-    /*
-     * -------------------------------------------------------
-     * STACK PLAYBACK
-     * -------------------------------------------------------
-     */
+    const [currentQueueIndex, setCurrentQueueIndex] =
+        useState(0);
 
     const [currentStackIndex, setCurrentStackIndex] =
         useState(0);
 
+    const [currentLinkedListIndex, setCurrentLinkedListIndex] =
+        useState(0);
 
-    /*
-     * -------------------------------------------------------
-     * RUN STATE
-     * -------------------------------------------------------
-     */
+
+    /* =====================================================
+       RUN STATE
+       ===================================================== */
 
     const [isRunning, setIsRunning] =
         useState(false);
 
 
-    /*
-     * -------------------------------------------------------
-     * ERROR
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       ERROR
+       ===================================================== */
 
     const [error, setError] =
         useState(null);
 
 
-    /*
-     * =======================================================
-     * EXECUTION EVENTS
-     * =======================================================
-     */
+    /* =====================================================
+       EVENTS
+       ===================================================== */
 
     const events =
         execution?.events || [];
 
 
-    /*
-     * =======================================================
-     * RECURSION CALLS
-     * =======================================================
-     */
+    /* =====================================================
+       RECURSION CALLS
+       ===================================================== */
 
     const callEvents =
         useMemo(
@@ -1261,11 +2088,9 @@ export default function App() {
         );
 
 
-    /*
-     * =======================================================
-     * ARRAY STATES
-     * =======================================================
-     */
+    /* =====================================================
+       ARRAY STATES
+       ===================================================== */
 
     const arrayStates =
         useMemo(
@@ -1277,11 +2102,23 @@ export default function App() {
         );
 
 
-    /*
-     * =======================================================
-     * STACK STATES
-     * =======================================================
-     */
+    /* =====================================================
+       QUEUE STATES
+       ===================================================== */
+
+    const queueStates =
+        useMemo(
+            () =>
+                buildQueueStates(
+                    events
+                ),
+            [events]
+        );
+
+
+    /* =====================================================
+       STACK STATES
+       ===================================================== */
 
     const stackStates =
         useMemo(
@@ -1297,19 +2134,34 @@ export default function App() {
         );
 
 
-    /*
-     * =======================================================
-     * AUTO DETECTION
-     * =======================================================
-     *
-     * If an actual algorithm array exists,
-     * Auto uses Array.
-     *
-     * Otherwise it uses Recursion.
-     *
-     * args is already excluded.
-     * =======================================================
-     */
+    /* =====================================================
+       LINKED LIST STATES
+       ===================================================== */
+
+    const linkedListStates =
+        useMemo(
+            () =>
+                buildLinkedListStates(
+                    events
+                ),
+            [events]
+        );
+
+
+    /* =====================================================
+       AUTO MODE
+       =====================================================
+       
+       Existing priority is preserved:
+       
+       Array
+       Stack
+       Queue
+       Recursion
+       
+       Linked List is added after Queue so existing
+       behavior is not disturbed.
+       ===================================================== */
 
     const effectiveMode =
         visualizationMode === "auto"
@@ -1318,16 +2170,18 @@ export default function App() {
                     ? "array"
                     : stackStates.length > 0
                         ? "stack"
-                        : "recursion"
+                        : queueStates.length > 0
+                            ? "queue"
+                            : linkedListStates.length > 0
+                                ? "linked-list"
+                                : "recursion"
             )
             : visualizationMode;
 
 
-    /*
-     * =======================================================
-     * CURRENT RECURSION CALL
-     * =======================================================
-     */
+    /* =====================================================
+       CURRENT RECURSION CALL
+       ===================================================== */
 
     const currentCall =
         callEvents[
@@ -1335,11 +2189,9 @@ export default function App() {
         ] || null;
 
 
-    /*
-     * =======================================================
-     * GET LINE EVENT FOR CALL
-     * =======================================================
-     */
+    /* =====================================================
+       RECURSION LINE EVENT
+       ===================================================== */
 
     function getLineEventForCall(call) {
 
@@ -1356,9 +2208,9 @@ export default function App() {
                     String(
                         event.callId
                     ) ===
-                        String(
-                            call.callId
-                        )
+                    String(
+                        call.callId
+                    )
             );
 
 
@@ -1378,23 +2230,11 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * CURRENT RECURSION EVENT
-     * =======================================================
-     */
-
     const currentRecursionEvent =
         getLineEventForCall(
             currentCall
         );
 
-
-    /*
-     * =======================================================
-     * PREVIOUS RECURSION EVENT
-     * =======================================================
-     */
 
     const previousCall =
         callEvents[
@@ -1408,40 +2248,9 @@ export default function App() {
         );
 
 
-    /*
-     * =======================================================
-     * CURRENT STACK EVENT INDEX
-     * =======================================================
-     *
-     * The StackVisualizer reconstructs the call stack by
-     * replaying execution events up to the selected method
-     * entry.
-     *
-     * We intentionally use the selected recursion call here
-     * instead of changing the execution engine.
-     */
-
-    const currentStackEventIndex =
-        currentCall
-            ? events.findIndex(
-                event =>
-                    event.eventType ===
-                        "METHOD_ENTER" &&
-                    String(
-                        event.callId
-                    ) ===
-                        String(
-                            currentCall.callId
-                        )
-            )
-            : -1;
-
-
-    /*
-     * =======================================================
-     * CURRENT ARRAY STATE
-     * =======================================================
-     */
+    /* =====================================================
+       CURRENT ARRAY STATE
+       ===================================================== */
 
     const currentArrayState =
         arrayStates[
@@ -1449,23 +2258,31 @@ export default function App() {
         ] || null;
 
 
-    /*
-     * =======================================================
-     * PREVIOUS ARRAY STATE
-     * =======================================================
-     */
-
     const previousArrayState =
         arrayStates[
             currentArrayIndex - 1
         ] || null;
 
 
-    /*
-     * =======================================================
-     * CURRENT STACK STATE
-     * =======================================================
-     */
+    /* =====================================================
+       CURRENT QUEUE STATE
+       ===================================================== */
+
+    const currentQueueState =
+        queueStates[
+            currentQueueIndex
+        ] || null;
+
+
+    const previousQueueState =
+        queueStates[
+            currentQueueIndex - 1
+        ] || null;
+
+
+    /* =====================================================
+       CURRENT STACK STATE
+       ===================================================== */
 
     const currentStackState =
         stackStates[
@@ -1473,62 +2290,72 @@ export default function App() {
         ] || null;
 
 
-    /*
-     * =======================================================
-     * PREVIOUS STACK STATE
-     * =======================================================
-     */
-
     const previousStackState =
         stackStates[
             currentStackIndex - 1
         ] || null;
 
 
-    /*
-     * =======================================================
-     * ACTIVE EVENT
-     * =======================================================
-     */
+    /* =====================================================
+       CURRENT LINKED LIST STATE
+       ===================================================== */
+
+    const currentLinkedListState =
+        linkedListStates[
+            currentLinkedListIndex
+        ] || null;
+
+
+    const previousLinkedListState =
+        linkedListStates[
+            currentLinkedListIndex - 1
+        ] || null;
+
+
+    /* =====================================================
+       ACTIVE EVENT
+       ===================================================== */
 
     const activeEvent =
         effectiveMode === "array"
             ? currentArrayState?.event
-            : effectiveMode === "stack"
-                ? currentStackState?.event
-                : currentRecursionEvent;
+            : effectiveMode === "queue"
+                ? currentQueueState?.event
+                : effectiveMode === "stack"
+                    ? currentStackState?.event
+                    : effectiveMode === "linked-list"
+                        ? currentLinkedListState?.event
+                        : currentRecursionEvent;
 
 
-    /*
-     * =======================================================
-     * PREVIOUS ACTIVE EVENT
-     * =======================================================
-     */
+    /* =====================================================
+       PREVIOUS ACTIVE EVENT
+       ===================================================== */
 
     const previousActiveEvent =
         effectiveMode === "array"
             ? previousArrayState?.event
-            : effectiveMode === "stack"
-                ? previousStackState?.event
-                : previousRecursionEvent;
+            : effectiveMode === "queue"
+                ? previousQueueState?.event
+                : effectiveMode === "stack"
+                    ? previousStackState?.event
+                    : effectiveMode === "linked-list"
+                        ? previousLinkedListState?.event
+                        : previousRecursionEvent;
 
 
-    /*
-     * =======================================================
-     * ACTIVE LINE
-     * =======================================================
-     */
+    /* =====================================================
+       ACTIVE LINE
+       ===================================================== */
 
     const activeLine =
         activeEvent?.lineNumber ??
         null;
 
 
-    /*
-     * =======================================================
-     * RUN CODE
-     * =======================================================
-     */
+    /* =====================================================
+       RUN CODE
+       ===================================================== */
 
     async function handleRunCode() {
 
@@ -1542,7 +2369,11 @@ export default function App() {
 
         setCurrentArrayIndex(0);
 
+        setCurrentQueueIndex(0);
+
         setCurrentStackIndex(0);
+
+        setCurrentLinkedListIndex(0);
 
 
         try {
@@ -1590,47 +2421,9 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * RECURSION PREVIOUS
-     * =======================================================
-     */
-
-    function handlePreviousCall() {
-
-        setCurrentCallIndex(
-            index =>
-                Math.max(
-                    0,
-                    index - 1
-                )
-        );
-    }
-
-
-    /*
-     * =======================================================
-     * RECURSION NEXT
-     * =======================================================
-     */
-
-    function handleNextCall() {
-
-        setCurrentCallIndex(
-            index =>
-                Math.min(
-                    callEvents.length - 1,
-                    index + 1
-                )
-        );
-    }
-
-
-    /*
-     * =======================================================
-     * ARRAY PREVIOUS
-     * =======================================================
-     */
+    /* =====================================================
+       ARRAY PREVIOUS
+       ===================================================== */
 
     function handlePreviousArray() {
 
@@ -1644,11 +2437,9 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * ARRAY NEXT
-     * =======================================================
-     */
+    /* =====================================================
+       ARRAY NEXT
+       ===================================================== */
 
     function handleNextArray() {
 
@@ -1662,11 +2453,41 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * STACK PREVIOUS
-     * =======================================================
-     */
+    /* =====================================================
+       QUEUE PREVIOUS
+       ===================================================== */
+
+    function handlePreviousQueue() {
+
+        setCurrentQueueIndex(
+            index =>
+                Math.max(
+                    0,
+                    index - 1
+                )
+        );
+    }
+
+
+    /* =====================================================
+       QUEUE NEXT
+       ===================================================== */
+
+    function handleNextQueue() {
+
+        setCurrentQueueIndex(
+            index =>
+                Math.min(
+                    queueStates.length - 1,
+                    index + 1
+                )
+        );
+    }
+
+
+    /* =====================================================
+       STACK PREVIOUS
+       ===================================================== */
 
     function handlePreviousStack() {
 
@@ -1680,11 +2501,9 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * STACK NEXT
-     * =======================================================
-     */
+    /* =====================================================
+       STACK NEXT
+       ===================================================== */
 
     function handleNextStack() {
 
@@ -1698,11 +2517,41 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * CALL TREE SELECTION
-     * =======================================================
-     */
+    /* =====================================================
+       LINKED LIST PREVIOUS
+       ===================================================== */
+
+    function handlePreviousLinkedList() {
+
+        setCurrentLinkedListIndex(
+            index =>
+                Math.max(
+                    0,
+                    index - 1
+                )
+        );
+    }
+
+
+    /* =====================================================
+       LINKED LIST NEXT
+       ===================================================== */
+
+    function handleNextLinkedList() {
+
+        setCurrentLinkedListIndex(
+            index =>
+                Math.min(
+                    linkedListStates.length - 1,
+                    index + 1
+                )
+        );
+    }
+
+
+    /* =====================================================
+       CALL TREE SELECTION
+       ===================================================== */
 
     function handleCallSelect(node) {
 
@@ -1736,11 +2585,9 @@ export default function App() {
     }
 
 
-    /*
-     * =======================================================
-     * MODE CHANGE
-     * =======================================================
-     */
+    /* =====================================================
+       MODE CHANGE
+       ===================================================== */
 
     function handleVisualizationChange(
         event
@@ -1755,11 +2602,6 @@ export default function App() {
         );
 
 
-        /*
-         * Reset playback
-         * when switching view.
-         */
-
         if (
             value === "array"
         ) {
@@ -1769,10 +2611,10 @@ export default function App() {
 
 
         if (
-            value === "recursion"
+            value === "queue"
         ) {
 
-            setCurrentCallIndex(0);
+            setCurrentQueueIndex(0);
         }
 
 
@@ -1783,14 +2625,68 @@ export default function App() {
             setCurrentStackIndex(0);
         }
 
+
+        if (
+            value === "linked-list"
+        ) {
+
+            setCurrentLinkedListIndex(0);
+        }
+
+
+        if (
+            value === "recursion"
+        ) {
+
+            setCurrentCallIndex(0);
+        }
+
     }
 
 
-    /*
-     * =======================================================
-     * RENDER
-     * =======================================================
-     */
+    /* =====================================================
+       HEADER LABELS
+       ===================================================== */
+
+    const visualizationTitle =
+        effectiveMode === "array"
+            ? "Array Visualization"
+            : effectiveMode === "queue"
+                ? "Queue Visualization"
+                : effectiveMode === "stack"
+                    ? "Call Stack"
+                    : effectiveMode === "linked-list"
+                        ? "Linked List Visualization"
+                        : "Recursion Tree";
+
+
+    const visualizationDescription =
+        effectiveMode === "array"
+            ? "Current array state during execution."
+            : effectiveMode === "queue"
+                ? "Current queue state during execution."
+                : effectiveMode === "stack"
+                    ? "Current stack state during execution."
+                    : effectiveMode === "linked-list"
+                        ? "Current linked list state during execution."
+                        : "Recursive calls during execution.";
+
+
+    const visualizationBadge =
+        effectiveMode === "array"
+            ? "ARRAY"
+            : effectiveMode === "queue"
+                ? "QUEUE"
+                : effectiveMode === "stack"
+                    ? "STACK"
+                    : effectiveMode === "linked-list"
+                        ? "LINKED LIST"
+                        : "RECURSION";
+
+
+    /* =====================================================
+       RENDER
+       ===================================================== */
 
     return (
 
@@ -1902,7 +2798,7 @@ export default function App() {
                             handleVisualizationChange
                         }
                         className="
-                            min-w-[190px]
+                            min-w-[210px]
                             appearance-none
                             rounded-lg
                             border
@@ -1934,25 +2830,16 @@ export default function App() {
                             Recursion
                         </option>
 
-                        <option
-                            value="stack"
-                            
-                        >
+                        <option value="stack">
                             Stack
                         </option>
 
-                        <option
-                            value="queue"
-                            disabled
-                        >
-                            Queue — Coming Soon
+                        <option value="queue">
+                            Queue
                         </option>
 
-                        <option
-                            value="linked-list"
-                            disabled
-                        >
-                            Linked List — Coming Soon
+                        <option value="linked-list">
+                            Linked List
                         </option>
 
                         <option
@@ -2000,13 +2887,7 @@ export default function App() {
                         text-slate-500
                     ">
 
-                        {
-                            effectiveMode === "array"
-                                ? "Array Visualization"
-                                : effectiveMode === "stack"
-                                    ? "Call Stack"
-                                    : "Recursion Tree"
-                        }
+                        {visualizationTitle}
 
                     </span>
 
@@ -2131,15 +3012,7 @@ export default function App() {
                                 text-xs
                                 font-semibold
                             ">
-
-                                {
-                                    effectiveMode === "array"
-                                        ? "Array Visualization"
-                                        : effectiveMode === "stack"
-                                            ? "Call Stack"
-                                            : "Recursion Tree"
-                                }
-
+                                {visualizationTitle}
                             </h2>
 
 
@@ -2148,15 +3021,7 @@ export default function App() {
                                 text-[10px]
                                 text-slate-500
                             ">
-
-                                {
-                                    effectiveMode === "array"
-                                        ? "Current array state during execution."
-                                        : effectiveMode === "stack"
-                                            ? "Push, pop, peek and stack state during execution."
-                                            : "Recursive calls during execution."
-                                }
-
+                                {visualizationDescription}
                             </p>
 
                         </div>
@@ -2172,15 +3037,7 @@ export default function App() {
                             font-semibold
                             text-slate-500
                         ">
-
-                            {
-                                effectiveMode === "array"
-                                    ? "ARRAY"
-                                    : effectiveMode === "stack"
-                                        ? "STACK"
-                                        : "RECURSION"
-                            }
-
+                            {visualizationBadge}
                         </span>
 
                     </div>
@@ -2264,6 +3121,83 @@ export default function App() {
 
 
                     {/* =================================================
+                        QUEUE
+                    ================================================= */}
+
+                    {effectiveMode === "queue" && (
+
+                        <div className="
+                            h-[450px]
+                        ">
+
+                            {execution ? (
+
+                                queueStates.length > 0 ? (
+
+                                    <QueuePanel
+                                        state={
+                                            currentQueueState
+                                        }
+                                    />
+
+                                ) : (
+
+                                    <div className="
+                                        flex
+                                        h-full
+                                        items-center
+                                        justify-center
+                                        text-center
+                                    ">
+
+                                        <div>
+
+                                            <p className="
+                                                text-sm
+                                                font-semibold
+                                                text-slate-300
+                                            ">
+                                                No queue detected
+                                            </p>
+
+                                            <p className="
+                                                mt-2
+                                                text-xs
+                                                text-slate-500
+                                            ">
+                                                This execution does
+                                                not contain a
+                                                supported queue.
+                                            </p>
+
+                                        </div>
+
+                                    </div>
+
+                                )
+
+                            ) : (
+
+                                <div className="
+                                    flex
+                                    h-full
+                                    items-center
+                                    justify-center
+                                    text-xs
+                                    text-slate-500
+                                ">
+                                    Run your code to see
+                                    the queue visualization.
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    )}
+
+
+                    {/* =================================================
                         STACK
                     ================================================= */}
 
@@ -2278,7 +3212,7 @@ export default function App() {
 
                                 stackStates.length > 0 ? (
 
-                                    <StackVisualizer
+                                    <StackDataPanel
                                         state={
                                             currentStackState
                                         }
@@ -2292,11 +3226,29 @@ export default function App() {
                                         items-center
                                         justify-center
                                         text-center
-                                        text-xs
-                                        text-slate-500
                                     ">
-                                        No java.util.Stack was
-                                        detected in this execution.
+
+                                        <div>
+
+                                            <p className="
+                                                text-sm
+                                                font-semibold
+                                                text-slate-300
+                                            ">
+                                                No Stack detected
+                                            </p>
+
+                                            <p className="
+                                                mt-2
+                                                text-xs
+                                                text-slate-500
+                                            ">
+                                                Use java.util.Stack
+                                                in your program.
+                                            </p>
+
+                                        </div>
+
                                     </div>
 
                                 )
@@ -2308,12 +3260,89 @@ export default function App() {
                                     h-full
                                     items-center
                                     justify-center
-                                    text-center
                                     text-xs
                                     text-slate-500
                                 ">
                                     Run your code to see
                                     the stack visualization.
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    )}
+
+
+                    {/* =================================================
+                        LINKED LIST
+                    ================================================= */}
+
+                    {effectiveMode === "linked-list" && (
+
+                        <div className="
+                            h-[450px]
+                            overflow-auto
+                        ">
+
+                            {execution ? (
+
+                                linkedListStates.length > 0 ? (
+
+                                    <LinkedListPanel
+                                        state={
+                                            currentLinkedListState
+                                        }
+                                    />
+
+                                ) : (
+
+                                    <div className="
+                                        flex
+                                        h-full
+                                        items-center
+                                        justify-center
+                                        text-center
+                                    ">
+
+                                        <div>
+
+                                            <p className="
+                                                text-sm
+                                                font-semibold
+                                                text-slate-300
+                                            ">
+                                                No Linked List detected
+                                            </p>
+
+                                            <p className="
+                                                mt-2
+                                                text-xs
+                                                text-slate-500
+                                            ">
+                                                Use a supported linked
+                                                list implementation
+                                                in your program.
+                                            </p>
+
+                                        </div>
+
+                                    </div>
+
+                                )
+
+                            ) : (
+
+                                <div className="
+                                    flex
+                                    h-full
+                                    items-center
+                                    justify-center
+                                    text-xs
+                                    text-slate-500
+                                ">
+                                    Run your code to see
+                                    the linked list visualization.
                                 </div>
 
                             )}
@@ -2507,6 +3536,119 @@ export default function App() {
 
 
             {/* =================================================
+                QUEUE PLAYBACK
+            ================================================= */}
+
+            {effectiveMode === "queue" &&
+                queueStates.length > 0 && (
+
+                <div className="
+                    mt-3
+                    flex
+                    items-center
+                    justify-between
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#161b22]
+                    px-4
+                    py-3
+                ">
+
+                    <button
+                        type="button"
+                        onClick={
+                            handlePreviousQueue
+                        }
+                        disabled={
+                            currentQueueIndex === 0
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        ← Previous State
+                    </button>
+
+
+                    <div className="
+                        text-center
+                    ">
+
+                        <p className="
+                            text-xs
+                            font-semibold
+                        ">
+                            Queue State{" "}
+                            {currentQueueIndex + 1}
+                            {" "}
+                            of{" "}
+                            {queueStates.length}
+                        </p>
+
+
+                        <p className="
+                            mt-1
+                            font-mono
+                            text-[10px]
+                            text-[#6685ff]
+                        ">
+                            Line{" "}
+                            {
+                                currentQueueState
+                                    ?.event
+                                    ?.lineNumber ??
+                                "—"
+                            }
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        onClick={
+                            handleNextQueue
+                        }
+                        disabled={
+                            currentQueueIndex >=
+                            queueStates.length - 1
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        Next State →
+                    </button>
+
+                </div>
+
+            )}
+
+
+            {/* =================================================
                 STACK PLAYBACK
             ================================================= */}
 
@@ -2554,9 +3696,6 @@ export default function App() {
 
 
                     <div className="
-                        min-w-0
-                        flex-1
-                        px-5
                         text-center
                     ">
 
@@ -2578,10 +3717,7 @@ export default function App() {
                             text-[10px]
                             text-[#6685ff]
                         ">
-                            {
-                                currentStackState?.operation
-                            }
-                            {" · Line "}
+                            Line{" "}
                             {
                                 currentStackState
                                     ?.event
@@ -2601,6 +3737,120 @@ export default function App() {
                         disabled={
                             currentStackIndex >=
                             stackStates.length - 1
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        Next State →
+                    </button>
+
+                </div>
+
+            )}
+
+
+            {/* =================================================
+                LINKED LIST PLAYBACK
+            ================================================= */}
+
+            {effectiveMode === "linked-list" &&
+                linkedListStates.length > 0 && (
+
+                <div className="
+                    mt-3
+                    flex
+                    items-center
+                    justify-between
+                    rounded-lg
+                    border
+                    border-[#30363d]
+                    bg-[#161b22]
+                    px-4
+                    py-3
+                ">
+
+                    <button
+                        type="button"
+                        onClick={
+                            handlePreviousLinkedList
+                        }
+                        disabled={
+                            currentLinkedListIndex === 0
+                        }
+                        className="
+                            rounded-md
+                            border
+                            border-[#30363d]
+                            px-4
+                            py-2
+                            text-xs
+                            font-semibold
+                            text-slate-300
+                            transition
+                            hover:bg-[#1c2530]
+                            disabled:cursor-not-allowed
+                            disabled:opacity-30
+                        "
+                    >
+                        ← Previous State
+                    </button>
+
+
+                    <div className="
+                        min-w-0
+                        text-center
+                    ">
+
+                        <p className="
+                            text-xs
+                            font-semibold
+                        ">
+                            Linked List State{" "}
+                            {currentLinkedListIndex + 1}
+                            {" "}
+                            of{" "}
+                            {linkedListStates.length}
+                        </p>
+
+
+                        <p className="
+                            mt-1
+                            font-mono
+                            text-[10px]
+                            text-[#6685ff]
+                        ">
+                            Line{" "}
+                            {
+                                currentLinkedListState
+                                    ?.event
+                                    ?.lineNumber ??
+                                "—"
+                            }
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        onClick={
+                            handleNextLinkedList
+                        }
+                        disabled={
+                            currentLinkedListIndex >=
+                            linkedListStates.length - 1
                         }
                         className="
                             rounded-md
@@ -2648,7 +3898,14 @@ export default function App() {
                     <button
                         type="button"
                         onClick={
-                            handlePreviousCall
+                            () =>
+                                setCurrentCallIndex(
+                                    index =>
+                                        Math.max(
+                                            0,
+                                            index - 1
+                                        )
+                                )
                         }
                         disabled={
                             currentCallIndex === 0
@@ -2729,7 +3986,14 @@ export default function App() {
                     <button
                         type="button"
                         onClick={
-                            handleNextCall
+                            () =>
+                                setCurrentCallIndex(
+                                    index =>
+                                        Math.min(
+                                            callEvents.length - 1,
+                                            index + 1
+                                        )
+                                )
                         }
                         disabled={
                             currentCallIndex >=
