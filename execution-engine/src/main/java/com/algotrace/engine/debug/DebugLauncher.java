@@ -13,9 +13,16 @@ public class DebugLauncher {
 
     public DebugSession launch(String className) throws Exception {
 
+        System.out.println("[JDI] Starting debug session");
+        System.out.println("[JDI] Target class: " + className);
+
         LaunchingConnector connector =
                 Bootstrap.virtualMachineManager()
                         .defaultConnector();
+
+        System.out.println(
+                "[JDI] Connector: " + connector.name()
+        );
 
         Map<String, Connector.Argument> arguments =
                 connector.defaultArguments();
@@ -23,9 +30,17 @@ public class DebugLauncher {
         /*
          * Main class to execute.
          */
-        arguments
-                .get("main")
-                .setValue(className);
+        Connector.Argument mainArgument =
+                arguments.get("main");
+
+        if (mainArgument == null) {
+
+            throw new IllegalStateException(
+                    "JDI connector does not provide 'main' argument."
+            );
+        }
+
+        mainArgument.setValue(className);
 
         /*
          * Classpath for compiled student classes.
@@ -36,61 +51,99 @@ public class DebugLauncher {
                         .toAbsolutePath()
                         .toString();
 
-        arguments
-                .get("options")
-                .setValue("-cp " + classPath);
+        System.out.println(
+                "[JDI] Classpath: " + classPath
+        );
+
+        /*
+         * Configure target JVM options.
+         */
+        Connector.Argument optionsArgument =
+                arguments.get("options");
+
+        if (optionsArgument != null) {
+
+            optionsArgument.setValue(
+                    "-cp \"" + classPath + "\""
+            );
+        }
+
+        System.out.println(
+                "[JDI] Launching target JVM..."
+        );
 
         VirtualMachine virtualMachine =
                 connector.launch(arguments);
 
-        consumeOutput(virtualMachine.process());
+        System.out.println(
+                "[JDI] Target JVM connected successfully."
+        );
 
-        return new DebugSession(virtualMachine);
+        /*
+         * IMPORTANT:
+         *
+         * JDI requires the target JVM's stdout/stderr
+         * to be consumed while it is running.
+         */
+        consumeOutput(
+                virtualMachine.process()
+        );
 
+        return new DebugSession(
+                virtualMachine
+        );
     }
 
     /**
-     * Prevents the child JVM from blocking
-     * because stdout/stderr buffers become full.
+     * Continuously consume stdout/stderr of the
+     * target JVM so its buffers cannot block execution.
      */
-    private void consumeOutput(Process process) {
+    private void consumeOutput(
+            Process process
+    ) {
 
-        Thread outThread = new Thread(() -> {
+        Thread outThread =
+                new Thread(
+                        () -> {
 
-            try {
+                            try {
 
-                process
-                        .getInputStream()
-                        .transferTo(System.out);
+                                process
+                                        .getInputStream()
+                                        .transferTo(
+                                                System.out
+                                        );
 
-            }
+                            } catch (IOException ignored) {
+                            }
 
-            catch (IOException ignored) {
-            }
+                        },
+                        "algotrace-jdi-stdout"
+                );
 
-        });
+        Thread errThread =
+                new Thread(
+                        () -> {
 
-        Thread errThread = new Thread(() -> {
+                            try {
 
-            try {
+                                process
+                                        .getErrorStream()
+                                        .transferTo(
+                                                System.err
+                                        );
 
-                process
-                        .getErrorStream()
-                        .transferTo(System.err);
+                            } catch (IOException ignored) {
+                            }
 
-            }
-
-            catch (IOException ignored) {
-            }
-
-        });
+                        },
+                        "algotrace-jdi-stderr"
+                );
 
         outThread.setDaemon(true);
         errThread.setDaemon(true);
 
         outThread.start();
         errThread.start();
-
     }
-
 }
