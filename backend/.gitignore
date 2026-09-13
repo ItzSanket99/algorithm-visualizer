@@ -19,6 +19,9 @@ target/
 *.iml
 *.ipr
 
+### Workspace folders ###
+workspace/
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
